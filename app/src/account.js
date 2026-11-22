@@ -143,6 +143,33 @@
     },
   };
 
+  // ================= Sign in =================
+  // One shared password (APP_PASSWORD on Vercel). Pages with live data send people here first.
+  const nextPath = () => {
+    const next = new URLSearchParams(location.search).get("next") || "/";
+    return next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  };
+  SP.pages["/Identity/Login"] = {
+    title: "Sign in", noSub: true, section: "account", noIcon: true, smallTitle: true,
+    render() {
+      return `<form class="signin" id="signin">${SP.panel(`<label class="field"><span>Password</span><input type="password" name="password" autocomplete="current-password" required></label><p class="signin-error" hidden></p><button class="btn-dark" type="submit">Sign in</button>`)}</form>`;
+    },
+    wire(root) {
+      const form = $("#signin", root), error = $(".signin-error", root);
+      form.addEventListener("submit", async e => {
+        e.preventDefault();
+        error.hidden = true;
+        try {
+          await SP.api.post("/api/login", { password: $("[name=password]", form).value });
+          location.assign(nextPath());
+        } catch (err) {
+          error.textContent = err.status === 401 ? "That password isn't right." : err.message;
+          error.hidden = false;
+        }
+      });
+    },
+  };
+
   // Keep a renamed account name in the top bar on every page.
   const saved = localStorage.getItem("sp-name");
   if (saved) document.addEventListener("DOMContentLoaded", () => { const n = document.querySelector(".user-name"); if (n) n.textContent = saved; });

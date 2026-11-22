@@ -27,6 +27,23 @@
   SP.iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   SP.lastDate = SP.addDays(SP.today, -2);
 
+  // ---------- Server API ----------
+  // JSON calls to this site's /api routes. A 401 sends the person to sign in, then back here.
+  SP.signInPath = "/Identity/Login";
+  const apiCall = async (method, path, body) => {
+    const res = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && path !== "/api/login") location.assign(`${SP.signInPath}?next=${encodeURIComponent(location.pathname)}`);
+    if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (HTTP ${res.status})`), { status: res.status });
+    return data;
+  };
+  SP.api = { get: path => apiCall("GET", path), post: (path, body = {}) => apiCall("POST", path, body) };
+
   // ---------- Icons ----------
   const I = (SP.ICON = {
     dashboard: '<circle cx="12" cy="12" r="9.5"/><path d="M12 12l3.5-4"/><circle cx="12" cy="12" r="1.3" class="fill"/><path d="M7 13h1.5M12 6.5V8M16 13h1.5"/>',

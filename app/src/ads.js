@@ -235,16 +235,66 @@
     const sum = SP.sumPeriods(cols.map(c => c.p));
     return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: AD_METRICS.map(([label, key, fmt, heat, o = {}]) => ({ label, key, fmt, heat, ...o, summary: sum[key], values: cols.map(c => c.p[key]) })) });
   }
+  // The Advertising trend page shows live Amazon Ads data: daily totals per ad product from
+  // /api/ads/trend, summed into columns here. Profit needs product costs, which aren't
+  // connected yet, so those rows are left out.
+  const LIVE_METRICS = [["PPC Sales", "ppcSales", money, null], ["PPC Cost", "ppcCost", money, null], ["ACOS", "acos", v => pct(v), "down"], ["Orders", "ppcOrders", int, null], ["Units", "ppcUnits", int, null], ["Conversion", "ppcConversion", v => pct(v), "up"], ["CPC", "cpc", money, "down"], ["Impressions", "impressions", int, null], ["Clicks", "clicks", int, null], ["CTR", "ctr", v => pct(v), null], ["Cost Per Order", "costPerOrder", money, null], ["Avg Sales Price", "asp", money, null]];
+  const AD_PRODUCTS = [["SP", "Sponsored Products"], ["SB", "Sponsored Brands"]];
+  // Totals for one ad product between two "YYYY-MM-DD" dates, with the ratios worked out from them.
+  SP.adTotals = (days, adProduct, from, to) => {
+    const t = { ppcSales: 0, ppcCost: 0, ppcOrders: 0, ppcUnits: 0, impressions: 0, clicks: 0 };
+    for (const d of days) {
+      if (d.adProduct !== adProduct || d.date < from || d.date > to) continue;
+      t.ppcSales += d.sales; t.ppcCost += d.cost; t.ppcOrders += d.orders; t.ppcUnits += d.units; t.impressions += d.impressions; t.clicks += d.clicks;
+    }
+    const ratio = (a, b, k = 1) => (b ? (a / b) * k : 0);
+    return { ...t, acos: ratio(t.ppcCost, t.ppcSales, 100), ppcConversion: ratio(t.ppcOrders, t.clicks, 100), cpc: ratio(t.ppcCost, t.clicks), ctr: ratio(t.clicks, t.impressions, 100), costPerOrder: ratio(t.ppcCost, t.ppcOrders), asp: ratio(t.ppcSales, t.ppcUnits) };
+  };
+  function liveTrend(st, days, adProduct) {
+    const cols = [];
+    for (let i = st.cols - 1; i >= 0; i--) {
+      const end = SP.addDays(st.last, -i * st.days), start = SP.addDays(end, -st.days + 1);
+      cols.push({ start, end, p: SP.adTotals(days, adProduct, SP.iso(start), SP.iso(end)) });
+    }
+    const sum = SP.adTotals(days, adProduct, SP.iso(cols[0].start), SP.iso(st.last));
+    return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum[key], values: cols.map(c => c.p[key]) })) });
+  }
+  const syncedNote = data => {
+    const last = Object.values(data.synced || {}).map(s => s.syncedAt).sort().pop();
+    return last ? `Amazon Ads data, last synced ${new Date(last).toLocaleString("en-US")}.` : "Amazon Ads data hasn't synced yet.";
+  };
   SP.pages["/Ads/AdvertisingTrend"] = {
     title: "Advertising trend",
-    render() {
-      return `${SP.panel(`<div class="frow">${ctl.num("Columns:", 8, "cols")}${ctl.num("Days per column:", 7, "days")}${ctl.date("Last date:", SP.lastDate)}${ctl.products()}${ctl.apply()}</div>`)}<div id="adt"></div>`;
+    load: () => SP.api.get("/api/ads/trend"),
+    render(data) {
+      return `${SP.panel(`<div class="frow">${ctl.num("Columns:", 8, "cols")}${ctl.num("Days per column:", 7, "days")}${ctl.date("Last date:", SP.lastDate)}${ctl.apply()}<button class="btn-outline add" data-sync>${svg(I.refresh)}Sync now</button></div>`)}<div id="adt"></div>
+        ${SP.meta(syncedNote(data))}<p class="lead">Profit and profit margin need product costs, which aren't connected yet.</p>`;
     },
-    wire(root) {
+    wire(root, data) {
       const st = { cols: 8, days: 7, last: SP.lastDate };
-      const draw = () => { $("#adt", root).innerHTML = `<h4 class="ttl">Advertising trend for Sponsored Products</h4>${adTrend(st, 1, 0)}<h4 class="ttl">Advertising trend for Sponsored Brands</h4>${adTrend(st, 0.25, 77)}`; SP.paintHeat(root); };
+      let days = data.days;
+      const draw = () => {
+        $("#adt", root).innerHTML = days.length
+          ? AD_PRODUCTS.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${liveTrend(st, days, k)}`).join("")
+          : `<p class="lead">No Amazon Ads data yet. It syncs every morning, or use Sync now.</p>`;
+        SP.paintHeat(root);
+      };
       draw();
-      root.addEventListener("click", e => {
+      root.addEventListener("click", async e => {
+        if (e.target.closest("[data-sync]")) {
+          SP.toast("Syncing with Amazon Ads…");
+          try {
+            const summary = await SP.api.post("/api/sync/ads");
+            const fresh = await SP.api.get("/api/ads/trend");
+            days = fresh.days;
+            draw();
+            $(".meta", root).textContent = syncedNote(fresh);
+            SP.toast(summary.pending ? "Amazon is still preparing some reports. Check back in a few minutes." : "Amazon Ads data is up to date.");
+          } catch (err) {
+            SP.toast(err.message);
+          }
+          return;
+        }
         if (!e.target.closest("[data-apply]")) return;
         $$("[data-k]", root).forEach(i => { if (i.dataset.k === "cols") st.cols = Math.min(16, Math.max(1, +i.value || 1)); if (i.dataset.k === "days") st.days = Math.max(1, +i.value || 1); if (i.dataset.k === "last" && i.value) st.last = new Date(i.value + "T00:00:00"); });
         draw();

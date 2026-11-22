@@ -74,6 +74,11 @@
 
   // ---------- User menu & popovers ----------
   const userBtn = $("#user-btn"), userMenu = $("#user-menu");
+  $("#logout").addEventListener("click", async e => {
+    e.preventDefault();
+    try { await SP.api.post("/api/logout"); } catch { /* the cookie is cleared or already gone */ }
+    location.assign(SP.signInPath);
+  });
   userBtn.addEventListener("click", e => {
     e.stopPropagation();
     const open = userMenu.hidden;
@@ -616,10 +621,18 @@
     title.classList.toggle("small", !!page.smallTitle);
     document.title = `${page.title} - Seller Portal`;
 
-    view.innerHTML = `<div class="page page-${section}">${page.render()}</div>`;
-    const root = view.firstElementChild;
-    SP.wireCommon(root);
-    if (page.wire) page.wire(root);
+    // Pages with live data define load(); its result is passed to render() and wire().
+    const paint = data => {
+      view.innerHTML = `<div class="page page-${section}">${page.render(data)}</div>`;
+      const root = view.firstElementChild;
+      SP.wireCommon(root);
+      if (page.wire) page.wire(root, data);
+    };
+    if (!page.load) return paint();
+    view.innerHTML = `<div class="page page-${section}"><p class="lead">Loading…</p></div>`;
+    return page.load().then(paint, err => {
+      view.innerHTML = `<div class="page page-${section}"><div class="placeholder"><h2>This page couldn't load</h2>${SP.esc(err.message)}</div></div>`;
+    });
   }
 
   $("#page-title").addEventListener("click", e => {
