@@ -1,7 +1,7 @@
 /* Mass campaigns, strategy experts and the simple placeholder sections. */
 (() => {
   "use strict";
-  const SP = window.SP, { $, $$, svg, ICON: I, ctl } = SP;
+  const SP = window.SP, { $, svg, ICON: I } = SP;
   const P = SP.PRODUCTS;
 
   // ================= Mass campaigns =================

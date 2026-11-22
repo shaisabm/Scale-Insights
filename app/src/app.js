@@ -13,20 +13,6 @@
     mass: '<path d="M12 3l9 4.5-9 4.5-9-4.5z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 16.5l9 4.5 9-4.5"/>',
     strategy: '<path d="M2 9l10-4.5L22 9l-10 4.5z"/><path d="M6 11v5c2 2 10 2 12 0v-5M22 9v6"/>',
   };
-  const COLORS = { dashboard: "#d7dbe3", sales: "#7fd3a4", products: "#f2a7c3", restock: "#f6d36b", keyword: "#f4a26a", ads: "#b79cf7", automation: "#79c3f2", mass: "#f39c50", strategy: "#8fd6b0" };
-
-  const NAV = [
-    { id: "dashboard", path: "/", name: "Dashboard", desc: "Summary overview" },
-    { id: "sales", path: "/sales", name: "Sales", desc: "Trends, orders & returns" },
-    { id: "products", path: "/products", name: "Products", desc: "ROI, inventory value, COGS" },
-    { id: "restock", path: "/restock", name: "Restock Forecasting", desc: "Inventory restock management" },
-    { id: "keyword", path: "/keyword-ranking", name: "Keyword Ranking", desc: "Keyword rank tracker" },
-    { id: "ads", path: "/ads-insights", name: "Ads Insights", desc: "Performance & actionable insights" },
-    { id: "automation", path: "/automation", name: "Automation", desc: "Automate ads optimisation" },
-    { id: "mass", path: "/mass-campaigns", name: "Mass Campaigns", desc: "Create bulk campaigns" },
-    { id: "strategy", path: "/strategy-experts", name: "Strategy Experts", desc: "Video strategies from experts" },
-  ];
-
   const svg = (body, cls = "") => `<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${body}</svg>`;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -266,6 +252,7 @@
     ppc: { label: "PPC", metrics: ["costs", "ppcClicks", "acos", "tacos"] },
   };
   const MAX_METRICS = 5;
+  /** @type {[string, string, number, number][]} */
   const GRAN = [["day", "Days", 1, 62], ["week", "Weeks", 14, 210], ["month", "Months", 32, Infinity]];
   const RULE = { ruleAssigned: ["Rule/Strategy assigned", "#FFC107"], ruleEdited: ["Rule/Strategy edited", "#FF8B07"] };
   const SUMS = ["sales", "ppcSales", "organicSales", "costs", "vatTax", "refunds", "totalUnits", "organicUnits", "promotionUnits", "ppcClicks", "profits", "fbaFees", "sessions", "ruleAssigned", "ruleEdited"];
@@ -460,6 +447,7 @@
   ];
   const fmt = (v, t) => (v === 0 && t !== "usd" && t !== "pct" && t !== "pct2" ? "" : t === "usd" ? money(v) : t === "pct" ? pct(v) : t === "pct2" ? (v ? `${v.toFixed(2)}%` : "") : String(v));
 
+  /** @returns {any[]} Rows whose fields are filled from COLS at runtime. */
   function rowsFor(tab) {
     const [mult, count, offset] = PERIOD_SCALE[tab];
     if (!count) return [];

@@ -53,11 +53,11 @@
   };
 
   // ================= Ads insights =================
+  /** @type {[string, number, number, number][]} */
   const TERMS = [
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const sponsored = ["Products", "Products", "Products", "Products", "Brands", "Display"];
   const card = (title, body, tip, id) => `<section class="icard"><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${{ st0: "/Ads/SearchTerms", acos: "/Ads/SearchTerms", perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
@@ -92,11 +92,13 @@
 
   // ---------- Performance ----------
   const perfRows = (() => {
+    /** @type {[number, string, number, number, number, number, number, number][]} */
     const base = [[1, "Products", 119089, 883, 30, 30, 690.7, 721.31], [0, "Products", 68401, 251, 12, 13, 297.87, 238.67], [0, "Brands", 14676, 153, 9, 9, 210.91, 141.8], [1, "Brands", 20073, 145, 3, 3, 74.97, 134.05], [1, "Display", 46415, 248, 2, 2, 45.98, 90.74], [0, "Display", 9948, 92, 0, 0, 0, 27.65]];
     return base.map(([i, sp, imp, clicks, orders, units, sales, spend]) => ({ p: P[i], sp, imp, clicks, orders, units, sales, conv: clicks ? (orders / clicks) * 100 : 0, spend, acos: sales ? (spend / sales) * 100 : 0, cpc: spend / clicks }));
   })();
   const perfCols = [{ key: "p", label: "Product", muted: true, fmt: p => SP.productCell(p) }, { key: "sp", label: "Sponsored", filter: true }, { key: "imp", label: "Impressions", align: "r", filter: true, fmt: int }, { key: "clicks", label: "Clicks", align: "r", filter: true }, { key: "orders", label: "Orders", align: "r", filter: true, fmt: v => v || "" }, { key: "units", label: "Units", align: "r", filter: true, fmt: v => v || "" }, { key: "sales", label: "Sales", align: "r", filter: true, fmt: v => (v ? money(v) : "") }, { key: "conv", label: "Conversion", align: "r", filter: true, fmt: v => (v ? pct(v) : "") }, { key: "spend", label: "Spend", align: "r", filter: true, fmt: money }, { key: "acos", label: "ACOS", align: "r", fmt: v => (v ? pct(v) : "") }, { key: "cpc", label: "CPC", align: "r", fmt: money }];
   const sumPerf = rs => { const s = { imp: 0, clicks: 0, orders: 0, units: 0, sales: 0, spend: 0 }; rs.forEach(r => Object.keys(s).forEach(k => (s[k] += r[k]))); return { ...s, conv: (s.orders / s.clicks) * 100, acos: (s.spend / s.sales) * 100, cpc: s.spend / s.clicks }; };
+  /** @param {any} [extra] */
   const learnFilters = (extra = []) => SP.actions(Object.assign([{ yt: true, label: "Learn", act: "learn" }, { icon: "funnel", label: "Filters", act: "filters" }, { icon: "download", label: "Download as CSV", act: "csv", caret: extra.caret }], { extra: extra.html || "" }));
 
   SP.pages["/Ads/Performance"] = {
@@ -143,7 +145,7 @@
         ${SP.panel(`<div class="frow">${ctl.range("", 90, "Last 90 Days")}${ctl.products()}${ctl.select("Select filter", ["No filter", "Zero sales", "High ACOS"])}</div><div class="frow">${ctl.apply("Update")}</div>`)}
         ${SP.tabs("stt", ["Products", "Search terms"])}
         ${SP.panels("stt", [
-          SP.grid({ id: "stp", columns: true, details: r => `<div class="detpanel">${TERMS.slice(0, 4).map(t => `<span class="chip-s">${t[0]}</span>`).join("")}</div>`, cols: [{ key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p) }, { key: "asin", label: "ASIN", fmt: (v, r) => `<span class="ellip w150">${SP.esc(r.p.title)}</span><small class="sub">${r.p.asin}, ${r.p.sku}</small>` }, { key: "tracked", label: "Tracked<br>keywords", align: "r" }, { key: "imp", label: "Impressions", align: "r", filter: true, fmt: int }, { key: "clicks", label: "Clicks", align: "r", filter: true, fmt: int }, { key: "orders", label: "Orders", align: "r", filter: true }, { key: "sales", label: "Sales", align: "r", filter: true, fmt: money }, { key: "conv", label: "Conversion", align: "r", filter: true, fmt: v => pct(v) }, { key: "spend", label: "Spend", align: "r", filter: true, fmt: money }], rows, sum: rs => ({ imp: rs.reduce((a, r) => a + r.imp, 0), clicks: rs.reduce((a, r) => a + r.clicks, 0), orders: rs.reduce((a, r) => a + r.orders, 0), sales: rs.reduce((a, r) => a + r.sales, 0), conv: 3.39, spend: rs.reduce((a, r) => a + r.spend, 0) }) }),
+          SP.grid({ id: "stp", columns: true, details: () => `<div class="detpanel">${TERMS.slice(0, 4).map(t => `<span class="chip-s">${t[0]}</span>`).join("")}</div>`, cols: [{ key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p) }, { key: "asin", label: "ASIN", fmt: (v, r) => `<span class="ellip w150">${SP.esc(r.p.title)}</span><small class="sub">${r.p.asin}, ${r.p.sku}</small>` }, { key: "tracked", label: "Tracked<br>keywords", align: "r" }, { key: "imp", label: "Impressions", align: "r", filter: true, fmt: int }, { key: "clicks", label: "Clicks", align: "r", filter: true, fmt: int }, { key: "orders", label: "Orders", align: "r", filter: true }, { key: "sales", label: "Sales", align: "r", filter: true, fmt: money }, { key: "conv", label: "Conversion", align: "r", filter: true, fmt: v => pct(v) }, { key: "spend", label: "Spend", align: "r", filter: true, fmt: money }], rows, sum: rs => ({ imp: rs.reduce((a, r) => a + r.imp, 0), clicks: rs.reduce((a, r) => a + r.clicks, 0), orders: rs.reduce((a, r) => a + r.orders, 0), sales: rs.reduce((a, r) => a + r.sales, 0), conv: 3.39, spend: rs.reduce((a, r) => a + r.spend, 0) }) }),
           SP.grid({ id: "stt", columns: true, cols: [{ key: "term", label: "Search term", filter: true }, { key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p, "sm") }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "orders", label: "Orders", align: "r" }, { key: "spend", label: "Spend", align: "r", fmt: money }, { key: "rank", label: "Rank", align: "r" }, { key: "term", label: "Track", muted: true, fmt: t => `<button class="link-btn" data-track="${SP.esc(t)}">Track</button>` }], rows: terms }),
         ])}
         ${SP.meta("Updated just now")}`;

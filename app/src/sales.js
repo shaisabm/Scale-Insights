@@ -35,7 +35,7 @@
         const first = new Date(st.last.getFullYear(), st.last.getMonth() - i, 1);
         const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0);
         const end = lastDay > st.last ? st.last : lastDay;
-        const days = Math.round((end - first) / 864e5) + 1;
+        const days = Math.round((end.getTime() - first.getTime()) / 864e5) + 1;
         out.push({ top: SP.dd(first), bottom: SP.dd(end), label: SP.dash(first), start: first, end, p: SP.period(hash(first), days) });
       }
     } else {
@@ -111,7 +111,7 @@
           else if (act === "refund") { st.hideRefund = !st.hideRefund; a.lastChild.textContent = st.hideRefund ? "Show refund balance" : "Hide refund balance"; draw(); }
           else if (act === "heat") { st.heat = !st.heat; $("span", a).textContent = st.heat ? "Color by best performance" : "Remove colors"; $("#trend", root).classList.toggle("noheat", !st.heat); }
           else if (act === "tcsv") SP.downloadCSV("sales-trend.csv", [["Metric", ...this.view.cols.map(c => `${SP.iso(c.start)} - ${SP.iso(c.end)}`)], ...SP.SALES_METRICS.map(([l, k]) => [l, ...this.view.cols.map(c => c.p[k].toFixed(2))])]);
-          else if (act === "pcsv") SP.downloadCSV("product-trend.csv", [["ASIN", "SKU", ...this.view.cols.map(c => SP.iso(c.end))], ...SP.PRODUCTS.map((p, i) => [p.asin, p.sku, ...this.view.cols.map((c, j) => (c.p.sales * [0.5, 0.35, 0.15][i]).toFixed(2))])]);
+          else if (act === "pcsv") SP.downloadCSV("product-trend.csv", [["ASIN", "SKU", ...this.view.cols.map(c => SP.iso(c.end))], ...SP.PRODUCTS.map((p, i) => [p.asin, p.sku, ...this.view.cols.map(c => (c.p.sales * [0.5, 0.35, 0.15][i]).toFixed(2))])]);
           const m = e.target.closest("[data-metrics]");
           if (m) { e.stopPropagation(); SP.popover(m, SP.SALES_METRICS.map(([l, k]) => ({ label: l, k, on: !st.hidden.has(k) })), (it, on) => { on ? st.hidden.delete(it.k) : st.hidden.add(it.k); draw(); }, { multi: true }); }
           const col = e.target.closest("[data-col]");
