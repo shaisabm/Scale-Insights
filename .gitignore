@@ -1,0 +1,13 @@
+# Build output — regenerated from app/src by `npm run build`
+app/dist/
+node_modules/
+
+# Session logs and transient build progress
+agent-session.jsonl
+build-activity.log
+*.log
+inbox/
+
+# Editor / OS files
+.idea/
+.DS_Store
