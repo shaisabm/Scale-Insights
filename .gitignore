@@ -11,3 +11,8 @@ inbox/
 # Editor / OS files
 .idea/
 .DS_Store
+
+# Vercel project link and local secrets (.env.example lists the variable names)
+.vercel
+.env*
+!.env.example
