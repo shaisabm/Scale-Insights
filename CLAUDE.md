@@ -17,6 +17,18 @@ Scale Insights is a static web app. `app/build.mjs` copies `app/src/` to `app/di
 
 CI (`.github/workflows/ci.yml`) runs Lint and Typecheck on every PR.
 
+## Amazon APIs
+
+- **Agents only read from the real profile Shaisab. They never write to it.** That holds for the Amazon Ads API, the SP-API production app and any other route, such as the deployed app's UI: no creating, changing, pausing or deleting campaigns, keywords, bids, budgets, listings, prices or anything else. When a task needs a write, do it in a sandbox, test or demo account, such as the SP-API sandbox app (`sandbox.sellingpartnerapi-*.amazon.com`) or the Amazon Ads sandbox (`advertising-api-test.amazon.com`).
+- Writes to the real profile are for the app's human users, in production.
+- The real profile's seller ID is sensitive. Never write it in code, comments, docs, commits, PRs, logs or messages. Call the profile Shaisab.
+- Credentials are environment variables in `.env.local` (gitignored) and on the Vercel project `scale-insights` (Secrets in Production and Preview, plain encrypted variables in Development). `.env.example` lists the names:
+  - `SP_API_SANDBOX_CLIENT_ID`, `SP_API_SANDBOX_CLIENT_SECRET`: SP-API sandbox app
+  - `SP_API_PROD_CLIENT_ID`, `SP_API_PROD_CLIENT_SECRET`: SP-API production app
+  - `AMAZON_ADS_CLIENT_ID`, `AMAZON_ADS_CLIENT_SECRET`, `AMAZON_ADS_REFRESH_TOKEN`: Amazon Ads API
+- They are server-side secrets. Read them only in server code (for example Vercel Functions), never in `app/src/`, which is copied to `app/dist/` and served publicly.
+- Never print or commit credential values. `vercel env pull` rewrites `.env.local` from the Development variables.
+
 ## Commits and pull requests
 
 - Commit only as the repo-local git identity (Shaisab Mistry, already set in `.git/config`). No co-authors.
