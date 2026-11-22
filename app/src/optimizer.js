@@ -60,6 +60,7 @@
   // ---------- Recommendations (sample) ----------
   const camp = (i, kind) => `${kind}-${["BROAD", "BROAD", "PHRASE"][i % 3]}-${["VIDEO", "DISCOVERY", "BUNDLE"][i % 3]} - ${P[i % 2].asin}`;
   const ag = i => `${P[i % 2].asin} - ${["Broad", "Exact", "Phrase"][i % 3]}`;
+  /** @type {[string, string, number, number, number][]} */
   const BIDS = [
     ["o2", "jump rope with counter", 67.33, 0.9, 0.6], ["o7", "ropeless jump rope", 45.74, 0.6, 0.57], ["o7", "jump rope with counter", 31.94, 1.2, 1.11],
     ["o7", "cordless battle ropes", 26.69, 0.9, 0.94], ["o7", "weighted jump rope", 21.34, 0.65, 0.75],
@@ -121,6 +122,7 @@
   // ---------- Dialogs ----------
   let refresh = () => {};
   const openDialog = ({ title, subtitle = "", body, foot, width = 400, top = false, cls = "" }) => {
+    /** @type {HTMLDivElement & { close?: () => void }} */
     const w = document.createElement("div");
     w.className = `om-wrap${top ? " top" : ""}`;
     w.innerHTML = `<div class="om ${cls}" tabindex="-1" role="dialog" aria-modal="true" aria-label="${esc(title)}" style="width:min(${width}px,100%)"><div class="om-head"><span class="om-title">${title}</span>${subtitle ? `<span class="om-div"></span><span class="om-sub">${subtitle}</span>` : ""}<button type="button" class="om-x" data-omclose aria-label="Close">✕</button></div><div class="om-body">${body}</div>${foot === null ? "" : `<div class="om-foot">${foot}</div>`}</div>`;

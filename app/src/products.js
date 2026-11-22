@@ -1,7 +1,7 @@
 /* Products section: details, inventory value, ROI, package, hide/show, custom COGS, bulk operations. */
 (() => {
   "use strict";
-  const SP = window.SP, { $, $$, svg, ICON: I, money, pct, ctl } = SP;
+  const SP = window.SP, { $, money, pct, ctl } = SP;
   const dotted = v => `<span class="dotu">${v}</span>`;
   const P = SP.PRODUCTS;
   const thumbCol = { key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p) };
