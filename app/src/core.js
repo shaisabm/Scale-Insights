@@ -44,6 +44,14 @@
   };
   SP.api = { get: path => apiCall("GET", path), post: (path, body = {}) => apiCall("POST", path, body) };
 
+  // ---------- Data source ----------
+  // Production always shows the real account. Preview deployments and local development start on
+  // the sample data; the "Real data" switch in the top bar changes that (and needs sign-in).
+  SP.env = window.SP_ENV || "development";
+  SP.canSwitchData = SP.env !== "production";
+  SP.usesRealData = () => !SP.canSwitchData || localStorage.getItem("sp-data-source") === "real";
+  SP.setRealData = on => localStorage.setItem("sp-data-source", on ? "real" : "sample");
+
   // ---------- Icons ----------
   const I = (SP.ICON = {
     dashboard: '<circle cx="12" cy="12" r="9.5"/><path d="M12 12l3.5-4"/><circle cx="12" cy="12" r="1.3" class="fill"/><path d="M7 13h1.5M12 6.5V8M16 13h1.5"/>',

@@ -12,9 +12,15 @@ const html = src("index.html");
 const BODY = html.slice(html.indexOf("<body>") + "<body>".length, html.indexOf("<script"));
 const SOURCES = SCRIPTS.map(name => src(`${name}.js`));
 
-/** Opens `path` in a fresh copy of the app shell and runs the scripts, as a page load would. */
-export function openApp(path) {
+/**
+ * Opens `path` in a fresh copy of the app shell and runs the scripts, as a page load would.
+ * `env` is the Vercel environment build.mjs writes into the page; `realData` presets the
+ * Real data switch (otherwise the stored choice is kept).
+ */
+export function openApp(path, { env = "production", realData } = {}) {
   history.replaceState(null, "", path);
+  if (realData !== undefined) localStorage.setItem("sp-data-source", realData ? "real" : "sample");
+  window.SP_ENV = env;
   document.body.innerHTML = BODY;
   for (const code of SOURCES) window.eval(code);
   return window.SP;

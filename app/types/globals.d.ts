@@ -3,6 +3,8 @@
 // core.js creates the shared namespace that every other script reads.
 interface Window {
   SP: any;
+  // Vercel environment written into each page by build.mjs: "production", "preview" or "development".
+  SP_ENV?: string;
 }
 
 // Event handlers read element properties straight off `e.target`

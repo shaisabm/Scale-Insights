@@ -8,6 +8,7 @@ Scale Insights is a static web app with Vercel Functions behind it. `app/build.m
 - Types for the shared globals live in `app/types/globals.d.ts`.
 - `app/dist/` is build output and is gitignored. Never edit or commit it.
 - Most pages still show invented sample data (`SP.period`, `SP.PRODUCTS` and per-page constants). A page with live data defines `load()`, which `route()` in `app.js` awaits before calling `render(data)` and `wire(root, data)`. It fetches through `SP.api.get/post`, which sends a signed-out person to `/Identity/Login`. So far only `/Ads/AdvertisingTrend` is live.
+- `app/build.mjs` writes `window.SP_ENV` (Vercel's `VERCEL_ENV`, or `development` outside Vercel) into every page. Production always uses the real account. Preview deployments and local development start on sample data and show a "Real data" switch in the top bar (`SP.usesRealData()`, remembered in `localStorage` as `sp-data-source`). A live page's `load()` returns sample data in the API's shape while the switch is off, so it needs no sign-in.
 - `api/` are Vercel Functions using the Web signature (`export async function GET(request)` returning a `Response`). Shared server code lives in `server/`: `amazon/` (Login with Amazon tokens and the Ads client), `ads/` (sync and queries), `auth.js`, `db.js` (Turso) and `http.js`. ES modules, no build step.
 - `scripts/` are local tools; `tests/` are the Vitest suites.
 

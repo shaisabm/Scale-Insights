@@ -260,14 +260,28 @@
     return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum[key], values: cols.map(c => c.p[key]) })) });
   }
   const syncedNote = data => {
+    if (data.sample) return "Sample data. Turn on Real data at the top to see your Amazon Ads numbers.";
     const last = Object.values(data.synced || {}).map(s => s.syncedAt).sort().pop();
     return last ? `Amazon Ads data, last synced ${new Date(last).toLocaleString("en-US")}.` : "Amazon Ads data hasn't synced yet.";
   };
+  // Invented days in the /api/ads/trend shape, shown while the Real data switch is off.
+  function sampleAdsTrend() {
+    const days = [];
+    for (let i = 89; i >= 0; i--) {
+      const d = SP.addDays(SP.lastDate, -i), seed = Math.floor(d / 864e5);
+      for (const { adProduct, scale, seedOff } of [{ adProduct: "SP", scale: 1, seedOff: 0 }, { adProduct: "SB", scale: 0.25, seedOff: 77 }]) {
+        const p = SP.period(seed + seedOff, 1);
+        days.push({ adProduct, date: SP.iso(d), impressions: Math.round(p.impressions * scale), clicks: Math.round(p.clicks * scale), cost: p.ppcCost * scale, orders: Math.round(p.ppcOrders * scale), units: Math.round(p.ppcUnits * scale), sales: p.ppcSales * scale });
+      }
+    }
+    return { days, synced: {}, sample: true };
+  }
   SP.pages["/Ads/AdvertisingTrend"] = {
     title: "Advertising trend",
-    load: () => SP.api.get("/api/ads/trend"),
+    load: () => (SP.usesRealData() ? SP.api.get("/api/ads/trend") : Promise.resolve(sampleAdsTrend())),
     render(data) {
-      return `${SP.panel(`<div class="frow">${ctl.num("Columns:", 8, "cols")}${ctl.num("Days per column:", 7, "days")}${ctl.date("Last date:", SP.lastDate)}${ctl.apply()}<button class="btn-outline add" data-sync>${svg(I.refresh)}Sync now</button></div>`)}<div id="adt"></div>
+      const sync = data.sample ? "" : `<button class="btn-outline add" data-sync>${svg(I.refresh)}Sync now</button>`;
+      return `${SP.panel(`<div class="frow">${ctl.num("Columns:", 8, "cols")}${ctl.num("Days per column:", 7, "days")}${ctl.date("Last date:", SP.lastDate)}${ctl.apply()}${sync}</div>`)}<div id="adt"></div>
         ${SP.meta(syncedNote(data))}<p class="lead">Profit and profit margin need product costs, which aren't connected yet.</p>`;
     },
     wire(root, data) {
@@ -279,7 +293,10 @@
           : `<p class="lead">No Amazon Ads data yet. It syncs every morning, or use Sync now.</p>`;
         SP.paintHeat(root);
       };
+      const readControls = () => $$("[data-k]", root).forEach(i => { if (i.dataset.k === "cols") st.cols = Math.min(16, Math.max(1, +i.value || 1)); if (i.dataset.k === "days") st.days = Math.max(1, +i.value || 1); if (i.dataset.k === "last" && i.value) st.last = new Date(i.value + "T00:00:00"); });
       draw();
+      // The columns are worked out here from data already loaded, so redraw as soon as a control changes.
+      root.addEventListener("change", e => { if (e.target.closest("[data-k]")) { readControls(); draw(); } });
       root.addEventListener("click", async e => {
         if (e.target.closest("[data-sync]")) {
           SP.toast("Syncing with Amazon Ads…");
@@ -296,7 +313,7 @@
           return;
         }
         if (!e.target.closest("[data-apply]")) return;
-        $$("[data-k]", root).forEach(i => { if (i.dataset.k === "cols") st.cols = Math.min(16, Math.max(1, +i.value || 1)); if (i.dataset.k === "days") st.days = Math.max(1, +i.value || 1); if (i.dataset.k === "last" && i.value) st.last = new Date(i.value + "T00:00:00"); });
+        readControls();
         draw();
       });
     },

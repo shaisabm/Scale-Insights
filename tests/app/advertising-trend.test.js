@@ -69,6 +69,23 @@ describe("Advertising trend page", () => {
     expect(rowValues(document.querySelector("table.trend"), "ppcSales")).toEqual(["$1,120.00", "$560.00", "$560.00"]);
   });
 
+  it("redraws as soon as a control changes, without Apply", async () => {
+    await openTrend(SP => lastDays(SP, 56).map(d => day("SP", d)));
+    const SP = window.SP;
+    const change = (key, value) => {
+      const input = document.querySelector(`[data-k=${key}]`);
+      input.value = value;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    change("cols", "2");
+    expect(rowValues(document.querySelector("table.trend"), "ppcSales")).toHaveLength(3);
+    const weekEarlier = SP.addDays(SP.lastDate, -7);
+    change("last", SP.iso(weekEarlier));
+    expect(document.querySelector("table.trend thead th.dh:last-child").textContent).toContain(SP.dd(weekEarlier));
+    change("days", "1");
+    expect(rowValues(document.querySelector("table.trend"), "ppcSales")).toEqual(["$80.00", "$40.00", "$40.00"]);
+  });
+
   it("explains when there is no data yet", async () => {
     await openTrend(() => []);
     expect(document.querySelector("table.trend")).toBeNull();

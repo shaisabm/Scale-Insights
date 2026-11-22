@@ -79,6 +79,16 @@
     try { await SP.api.post("/api/logout"); } catch { /* the cookie is cleared or already gone */ }
     location.assign(SP.signInPath);
   });
+
+  // ---------- Real data switch (preview deployments and local development only) ----------
+  if (SP.canSwitchData) {
+    const sw = document.createElement("label");
+    sw.className = "switch data-switch";
+    sw.title = "Show live data from your Amazon account instead of sample data. Needs sign-in.";
+    sw.innerHTML = `<input type="checkbox" ${SP.usesRealData() ? "checked" : ""}><span class="track"></span>Real data`;
+    $(".topbar-right").prepend(sw);
+    sw.querySelector("input").addEventListener("change", e => { SP.setRealData(e.target.checked); route(); });
+  }
   userBtn.addEventListener("click", e => {
     e.stopPropagation();
     const open = userMenu.hidden;
