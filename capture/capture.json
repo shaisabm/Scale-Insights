@@ -1,0 +1,115 @@
+{
+  "a11y": {
+    "images_without_alt": 0,
+    "landmarks": {},
+    "lang": "",
+    "unnamed_controls": 0,
+    "unnamed_examples": []
+  },
+  "assets": {
+    "background_images": [],
+    "fonts": [],
+    "images": [],
+    "inline_scripts": 0,
+    "requests": [
+      {
+        "bytes": 300,
+        "type": "other",
+        "url": "http://127.0.0.1:9222/favicon.ico"
+      }
+    ],
+    "scripts": [],
+    "stylesheets": []
+  },
+  "breakpoints": [],
+  "design": {
+    "backgrounds": [],
+    "css_variables": {},
+    "font_faces": [],
+    "font_sizes": [],
+    "font_weights": [],
+    "fonts": [],
+    "max_widths": [],
+    "radii": [],
+    "shadows": [],
+    "spacing": [
+      {
+        "count": 2,
+        "value": "8px"
+      }
+    ],
+    "text_colors": []
+  },
+  "forms": [],
+  "headings": [],
+  "health": {
+    "errors": [],
+    "failed_requests": [
+      {
+        "status": 404,
+        "type": "Other",
+        "url": "http://127.0.0.1:9222/favicon.ico"
+      }
+    ]
+  },
+  "lang": "",
+  "layouts": [
+    {
+      "blocks": [],
+      "page_h": 900,
+      "page_w": 1440,
+      "type": {
+        "body": 0,
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "width": 1440
+    },
+    {
+      "blocks": [],
+      "page_h": 900,
+      "page_w": 768,
+      "type": {
+        "body": 0,
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "width": 768
+    },
+    {
+      "blocks": [],
+      "page_h": 2261,
+      "page_w": 980,
+      "type": {
+        "body": 0,
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "width": 390
+    }
+  ],
+  "links": [],
+  "meta": {
+    "description": "",
+    "icons": [],
+    "og_image": "",
+    "og_title": "",
+    "theme_color": ""
+  },
+  "outline": [],
+  "page": {
+    "h": 900,
+    "w": 1440
+  },
+  "text": "",
+  "title": "",
+  "unreadable_stylesheets": 0,
+  "url": "http://127.0.0.1:9222/",
+  "viewport": {
+    "h": 900,
+    "w": 1440
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "id": "ev_7380e20b2e4fe0d7bfbfbcda19de9dfbb203d5ff30bf5017b1fb810b335c43ff",
+  "subject": {
+    "kind": "website",
+    "name": "about:blank"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "kind": "part",
+      "name": "events"
+    },
+    "source": {
+      "evidence_id": "ev_6be2d06272357970bf98b3699822ecdb89fe497c2de5ea0a36ad44d0579cbd89",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 1,
+      "next_offset": null,
+      "status": "all-in-view",
+      "total": 1
+    },
+    "from_evidence": "ev_6be2d06272357970bf98b3699822ecdb89fe497c2de5ea0a36ad44d0579cbd89",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "part": "events",
+      "value": {
+        "dropped": 0,
+        "families": [
+          "page_errors"
+        ],
+        "items": [
+          {
+            "kind": "page-error",
+            "message": "TypeError: Cannot read properties of null (reading 'focus')\n    at http://127.0.0.1:58909/optimizer.js:141:104",
+            "sequence": 1,
+            "step_index": 4
+          }
+        ],
+        "unavailable": []
+      }
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (all-in-view).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [],
+  "links": [
+    "ev_6be2d06272357970bf98b3699822ecdb89fe497c2de5ea0a36ad44d0579cbd89"
+  ]
+}

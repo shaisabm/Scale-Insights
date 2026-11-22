@@ -1,0 +1,19 @@
+{
+  "id": "unk_973b535528973dd3",
+  "revision": 2,
+  "question": "What does the signed-in dashboard at portal.scaleinsights.com look like, and how is its navigation laid out?",
+  "severity": "high",
+  "domain": "web",
+  "status": "resolved",
+  "probes": [
+    "Turn on Deep mode so the walkthrough recorder can drive the person's signed-in Chrome at 127.0.0.1:9222",
+    "Or have the person provide screenshots of the dashboard and its menus"
+  ],
+  "evidence_for": [
+    "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+    "ev_da587659c10f8483f41eb9fe9df9c9c189305a7a1d8eff6f1adb4a2145ee7dea",
+    "ev_56a61b3bfa340351794f8f3a80297c48c34598c3132fae4397a1e159b3dc1c3b"
+  ],
+  "evidence_against": [],
+  "resolution": "The walkthrough recorder drove the signed-in Chrome at 127.0.0.1:9222: the dashboard has a 60px dark icon rail (9 sections: Dashboard, Sales, Products, Restock Forecasting, Keyword Ranking, Ads Insights, Automation, Mass Campaigns, Strategy Experts) that opens into a 300px drawer with names and descriptions over a dimmed page (hamburger on phones), a top bar, a date and product filter, 4 period cards, an optimizer row, a performance chart and a product table with period tabs."
+}

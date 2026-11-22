@@ -1,0 +1,70 @@
+{
+  "id": "ev_614485c91ccaca5e54fb7904289c4bb9acc52cb66cdc735c0b5f20db97c65abf",
+  "subject": {
+    "kind": "javascript",
+    "name": "/tmp/ca-dl/js/main.js"
+  },
+  "operation": "js_sources_restore",
+  "params": {
+    "additional_paths": [],
+    "extraction_mode": "inspection",
+    "output_directory": "/tmp/ca-dl/restored",
+    "path": "/tmp/ca-dl/js/main.js",
+    "rewrite_level": "standard"
+  },
+  "result": {
+    "inputs": [
+      {
+        "bytes": 7118800,
+        "input": "main.js",
+        "input_index": 0,
+        "sha256": "becc49dcc9ff7babace2c0ba96ae2756d724b19e5edbf6bda8219b059f4462ac"
+      }
+    ],
+    "manifest": "/tmp/ca-dl/restored/manifest.json",
+    "notes": [],
+    "originals_truncated": false,
+    "output_directory": "/tmp/ca-dl/restored",
+    "outputs": [
+      {
+        "from": "main.js",
+        "kind": "pretty",
+        "path": "pretty/main.js",
+        "rewrites": 41539,
+        "sha256": "00a853fbebeea9a2ab10a950400755b51ea5e0b21f8165e849e469e00493c988"
+      }
+    ],
+    "outputs_total": 1
+  },
+  "summary": "Recovered 1 input(s) into /tmp/ca-dl/restored: 1 pretty-printed, 0 bundle module file(s), 0 original source(s) from maps.",
+  "confidence": "derived",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [
+    {
+      "code": "rewrites_conservative",
+      "message": "Only rewrites that provably keep meaning are applied; local variable names stay minified."
+    },
+    {
+      "code": "scope_hoisted",
+      "message": "Rollup/Vite production chunks merge modules into one scope; they are pretty-printed but not split."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/ca-dl/restored"
+    }
+  ],
+  "links": []
+}

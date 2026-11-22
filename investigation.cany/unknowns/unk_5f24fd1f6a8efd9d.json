@@ -1,0 +1,16 @@
+{
+  "id": "unk_5f24fd1f6a8efd9d",
+  "revision": 2,
+  "question": "What the original's \"See calculations\" text, similar-issues list and rule criteria tooltips actually contain (they come from the server per recommendation/rule).",
+  "severity": "low",
+  "domain": "web",
+  "status": "investigating",
+  "probes": [
+    "Response bodies of SmartInsightsRecommendation/GetCalculationDisplay, SimilarIssues and RuleCriteriaTooltip/GetRuleCriteriaTooltip from the signed-in session (keep_bodies)"
+  ],
+  "evidence_for": [
+    "ev_874cd7905738696687d7ae66cd662e2c9bd1000f5802df899f84967f582b1c42"
+  ],
+  "evidence_against": [],
+  "resolution": "Placeholder: the rebuild writes its own calculation text (current bid, target ACOS, new bid), lists similar issues as other pending items in the same ad group, and shows rule criteria in the tooltip. The real server wording is still unknown."
+}

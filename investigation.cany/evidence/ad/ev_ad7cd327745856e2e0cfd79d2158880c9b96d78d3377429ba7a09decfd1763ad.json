@@ -1,0 +1,61 @@
+{
+  "id": "ev_ad7cd327745856e2e0cfd79d2158880c9b96d78d3377429ba7a09decfd1763ad",
+  "subject": {
+    "kind": "website",
+    "name": "http://127.0.0.1:58640/"
+  },
+  "operation": "web_site_open",
+  "params": {
+    "height": 900,
+    "url": "http://127.0.0.1:58640/",
+    "width": 1440
+  },
+  "result": {
+    "browser": "Chrome/158.0.8127.36",
+    "facts": {
+      "elements": 623,
+      "forms": 0,
+      "height": 2383,
+      "images": 0,
+      "lang": "en",
+      "links": 22,
+      "ready": "complete",
+      "title": "Dashboard - Seller Portal",
+      "url": "http://127.0.0.1:58640/",
+      "width": 1440
+    },
+    "health": {
+      "errors": [],
+      "failed_requests": []
+    },
+    "title": "Dashboard - Seller Portal",
+    "url": "http://127.0.0.1:58640/"
+  },
+  "summary": "Opened http://127.0.0.1:58640/: \"Dashboard - Seller Portal\".",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "cdp",
+    "engine_version": "1.3",
+    "host": "macos-aarch64"
+  },
+  "limitations": [
+    {
+      "code": "private_profile",
+      "message": "A fresh private browser: pages behind a login show their signed-out state."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "url",
+      "value": "http://127.0.0.1:58640/"
+    }
+  ],
+  "links": []
+}

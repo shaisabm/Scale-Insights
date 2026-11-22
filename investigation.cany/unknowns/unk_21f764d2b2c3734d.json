@@ -1,0 +1,19 @@
+{
+  "id": "unk_21f764d2b2c3734d",
+  "revision": 2,
+  "question": "Exact look of the Scale Optimizer pop-ups (details, resolve, automate, edit optimizer) in the live portal: scripted clicks through web_walkthrough_record did not open them, so their screenshots are missing.",
+  "severity": "medium",
+  "domain": "web",
+  "status": "investigating",
+  "probes": [
+    "The person screenshots the details pop-up (click a Recommendations row) and the Edit Scale Optimizer window",
+    "A walkthrough tool whose clicks reach React handlers"
+  ],
+  "evidence_for": [
+    "ev_d5de19c181a06138566b56a0403b0221ac54d9e3b366c538670bbce57c2cedf5",
+    "ev_fb7288054cce32a0a03d4f1518154db2890497c2af8a75c5227d07f5e9ebced9",
+    "ev_614485c91ccaca5e54fb7904289c4bb9acc52cb66cdc735c0b5f20db97c65abf"
+  ],
+  "evidence_against": [],
+  "resolution": "Built the pop-ups from the original's own code structure and its stylesheet values (padding, colours, borders, button styles), so the layout should be close; pixel likeness is unverified because no screenshot of the live pop-ups exists. A screenshot from the person would settle it."
+}

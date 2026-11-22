@@ -1,0 +1,79 @@
+{
+  "id": "ev_76829e63123834995542f57b1a12ec71bf95a506b883df7c651319324d78baad",
+  "subject": {
+    "kind": "website",
+    "name": "https://portal.scaleinsights.com/StrategyExperts"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "kind": "summary"
+    },
+    "source": {
+      "evidence_id": "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 1,
+      "next_offset": null,
+      "status": "all-in-view",
+      "total": 1
+    },
+    "from_evidence": "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "carries_target_content": false,
+      "confidence": "observed",
+      "coverage": {
+        "examined": 1,
+        "status": "complete",
+        "total": 1
+      },
+      "evidence_id": "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+      "limitations": [
+        {
+          "code": "controlled_run",
+          "message": "This is one controlled run of scripted steps; different steps or timing would show different behaviour."
+        },
+        {
+          "code": "values_not_kept",
+          "message": "Request/response bodies are reduced to outlines, cookies and auth headers are dropped, and declared secrets are redacted in every encoding."
+        }
+      ],
+      "lists": {
+        "cookies_set": 0,
+        "failed": 0,
+        "requests": 146,
+        "steps": 1
+      },
+      "operation": "web_walkthrough_record",
+      "subject": {
+        "kind": "website",
+        "name": "https://portal.scaleinsights.com/StrategyExperts"
+      },
+      "summary": "Ran 1 of 1 scripted step(s) on https://portal.scaleinsights.com/StrategyExperts."
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (all-in-view).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [],
+  "links": [
+    "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42"
+  ]
+}

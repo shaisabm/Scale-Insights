@@ -1,0 +1,2287 @@
+{
+  "a11y": {
+    "images_without_alt": 0,
+    "landmarks": {
+      "banner": 1,
+      "complementary": 1,
+      "contentinfo": 1,
+      "main": 1
+    },
+    "lang": "en",
+    "unnamed_controls": 0,
+    "unnamed_examples": []
+  },
+  "assets": {
+    "background_images": [],
+    "fonts": [],
+    "images": [],
+    "inline_scripts": 0,
+    "requests": [
+      {
+        "bytes": 17450,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/styles.css"
+      },
+      {
+        "bytes": 27680,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/pages.css"
+      },
+      {
+        "bytes": 11798,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/optimizer.css"
+      },
+      {
+        "bytes": 6433,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/account.css"
+      },
+      {
+        "bytes": 10175,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/signals.css"
+      },
+      {
+        "bytes": 20293,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/optimizer-dialogs.css"
+      },
+      {
+        "bytes": 4499,
+        "type": "link",
+        "url": "http://127.0.0.1:63075/perf-chart.css"
+      },
+      {
+        "bytes": 13151,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/products.js"
+      },
+      {
+        "bytes": 38460,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/core.js"
+      },
+      {
+        "bytes": 23187,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/sales.js"
+      },
+      {
+        "bytes": 34988,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/ads.js"
+      },
+      {
+        "bytes": 14059,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/more.js"
+      },
+      {
+        "bytes": 14423,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/account.js"
+      },
+      {
+        "bytes": 42492,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/app.js"
+      },
+      {
+        "bytes": 73569,
+        "type": "script",
+        "url": "http://127.0.0.1:63075/optimizer.js"
+      }
+    ],
+    "scripts": [
+      "http://127.0.0.1:63075/core.js",
+      "http://127.0.0.1:63075/sales.js",
+      "http://127.0.0.1:63075/products.js",
+      "http://127.0.0.1:63075/ads.js",
+      "http://127.0.0.1:63075/more.js",
+      "http://127.0.0.1:63075/account.js",
+      "http://127.0.0.1:63075/optimizer.js",
+      "http://127.0.0.1:63075/app.js"
+    ],
+    "stylesheets": [
+      "http://127.0.0.1:63075/styles.css",
+      "http://127.0.0.1:63075/pages.css",
+      "http://127.0.0.1:63075/account.css",
+      "http://127.0.0.1:63075/optimizer.css",
+      "http://127.0.0.1:63075/optimizer-dialogs.css",
+      "http://127.0.0.1:63075/signals.css",
+      "http://127.0.0.1:63075/perf-chart.css"
+    ]
+  },
+  "breakpoints": [
+    {
+      "count": 2,
+      "px": 600,
+      "query": "max-width 600px"
+    },
+    {
+      "count": 1,
+      "px": 700,
+      "query": "max-width 700px"
+    },
+    {
+      "count": 1,
+      "px": 767,
+      "query": "max-width 767px"
+    },
+    {
+      "count": 5,
+      "px": 768,
+      "query": "max-width 768px"
+    },
+    {
+      "count": 1,
+      "px": 900,
+      "query": "max-width 900px"
+    },
+    {
+      "count": 1,
+      "px": 960,
+      "query": "max-width 960px"
+    },
+    {
+      "count": 3,
+      "px": 992,
+      "query": "max-width 992px"
+    },
+    {
+      "count": 3,
+      "px": 1200,
+      "query": "max-width 1200px"
+    },
+    {
+      "count": 2,
+      "px": 1400,
+      "query": "max-width 1400px"
+    },
+    {
+      "count": 1,
+      "px": 1400,
+      "query": "min-width 1400px"
+    }
+  ],
+  "design": {
+    "backgrounds": [
+      {
+        "count": 21,
+        "value": "#ffffff"
+      },
+      {
+        "count": 5,
+        "value": "#34465e"
+      },
+      {
+        "count": 3,
+        "value": "#fdebd5"
+      },
+      {
+        "count": 3,
+        "value": "#f7f9fc"
+      },
+      {
+        "count": 2,
+        "value": "#4f86d8"
+      },
+      {
+        "count": 1,
+        "value": "#151c29"
+      },
+      {
+        "count": 1,
+        "value": "#253147"
+      },
+      {
+        "count": 1,
+        "value": "#4444ff"
+      },
+      {
+        "count": 1,
+        "value": "#eef2f8"
+      },
+      {
+        "count": 1,
+        "value": "#7986cb"
+      },
+      {
+        "count": 1,
+        "value": "#26c6da"
+      },
+      {
+        "count": 1,
+        "value": "#dee2e6"
+      },
+      {
+        "count": 1,
+        "value": "#f7f9fa"
+      },
+      {
+        "count": 1,
+        "value": "#1d3da8"
+      },
+      {
+        "count": 1,
+        "value": "#425b76"
+      }
+    ],
+    "css_variables": {
+      "--body": "#212529",
+      "--border": "#ced4da",
+      "--card-shadow": "0 0.25rem 1.25rem 0 rgba(0, 0, 0, 0.14)",
+      "--drawer-w": "300px",
+      "--faint": "#adb5bd",
+      "--font": "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", \"Noto Sans\", \"Liberation Sans\", Arial, sans-serif",
+      "--ink": "#2c3a4f",
+      "--line": "#e9ecef",
+      "--link": "#2876de",
+      "--loss": "#dc3545",
+      "--muted": "#6c757d",
+      "--opt-shadow": "2px 8px 16px #00000026",
+      "--radius": "0.875rem",
+      "--rail": "#151c29",
+      "--rail-active": "#253147",
+      "--rail-text": "#cccccc",
+      "--rail-w": "60px",
+      "--sales": "#005cbf",
+      "--slate": "#34465e",
+      "--slate-hover": "#395070",
+      "--trial": "#4444ff"
+    },
+    "font_faces": [],
+    "font_sizes": [
+      {
+        "count": 152,
+        "value": "14px"
+      },
+      {
+        "count": 61,
+        "value": "12px"
+      },
+      {
+        "count": 37,
+        "value": "18px"
+      },
+      {
+        "count": 28,
+        "value": "15px"
+      },
+      {
+        "count": 14,
+        "value": "20px"
+      },
+      {
+        "count": 12,
+        "value": "16px"
+      },
+      {
+        "count": 5,
+        "value": "24px"
+      },
+      {
+        "count": 3,
+        "value": "10px"
+      },
+      {
+        "count": 2,
+        "value": "13px"
+      },
+      {
+        "count": 1,
+        "value": "22px"
+      }
+    ],
+    "font_weights": [
+      {
+        "count": 249,
+        "value": "400"
+      },
+      {
+        "count": 48,
+        "value": "600"
+      },
+      {
+        "count": 15,
+        "value": "500"
+      },
+      {
+        "count": 3,
+        "value": "700"
+      }
+    ],
+    "fonts": [
+      {
+        "count": 271,
+        "value": "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", \"Noto Sans\", \"Liberation Sans\", Arial, sans-serif"
+      },
+      {
+        "count": 44,
+        "value": "Roboto, Arial, sans-serif"
+      }
+    ],
+    "max_widths": [
+      {
+        "count": 4,
+        "value": "480px"
+      }
+    ],
+    "radii": [
+      {
+        "count": 12,
+        "value": "14px"
+      },
+      {
+        "count": 11,
+        "value": "10px"
+      },
+      {
+        "count": 3,
+        "value": "50%"
+      },
+      {
+        "count": 3,
+        "value": "12px"
+      },
+      {
+        "count": 3,
+        "value": "2px"
+      },
+      {
+        "count": 2,
+        "value": "3px"
+      },
+      {
+        "count": 2,
+        "value": "8px"
+      },
+      {
+        "count": 1,
+        "value": "14px 0px 0px 14px"
+      },
+      {
+        "count": 1,
+        "value": "0px 14px 14px 0px"
+      }
+    ],
+    "shadows": [
+      {
+        "count": 4,
+        "value": "rgba(0, 0, 0, 0.14) 0px 4px 20px 0px"
+      },
+      {
+        "count": 3,
+        "value": "rgba(0, 0, 0, 0.15) 2px 8px 16px 0px"
+      },
+      {
+        "count": 2,
+        "value": "rgba(0, 0, 0, 0.2) 0px 4px 12px 0px"
+      }
+    ],
+    "spacing": [
+      {
+        "count": 172,
+        "value": "10px"
+      },
+      {
+        "count": 140,
+        "value": "14px"
+      },
+      {
+        "count": 87,
+        "value": "8px"
+      },
+      {
+        "count": 60,
+        "value": "24px"
+      },
+      {
+        "count": 56,
+        "value": "4px"
+      },
+      {
+        "count": 54,
+        "value": "12px"
+      },
+      {
+        "count": 51,
+        "value": "6px"
+      },
+      {
+        "count": 33,
+        "value": "16px"
+      },
+      {
+        "count": 27,
+        "value": "20px"
+      },
+      {
+        "count": 16,
+        "value": "1px"
+      },
+      {
+        "count": 15,
+        "value": "2px"
+      },
+      {
+        "count": 9,
+        "value": "9.008px"
+      },
+      {
+        "count": 8,
+        "value": "13px"
+      },
+      {
+        "count": 7,
+        "value": "-1px"
+      },
+      {
+        "count": 6,
+        "value": "18px"
+      },
+      {
+        "count": 6,
+        "value": "5px"
+      },
+      {
+        "count": 4,
+        "value": "44px"
+      },
+      {
+        "count": 3,
+        "value": "40px"
+      },
+      {
+        "count": 2,
+        "value": "11px"
+      },
+      {
+        "count": 1,
+        "value": "32px"
+      },
+      {
+        "count": 1,
+        "value": "60px"
+      }
+    ],
+    "text_colors": [
+      {
+        "count": 154,
+        "value": "#212529"
+      },
+      {
+        "count": 55,
+        "value": "#6c757d"
+      },
+      {
+        "count": 28,
+        "value": "#dc3545"
+      },
+      {
+        "count": 26,
+        "value": "#adb5bd"
+      },
+      {
+        "count": 16,
+        "value": "#ffffff"
+      },
+      {
+        "count": 10,
+        "value": "#8a93a6"
+      },
+      {
+        "count": 5,
+        "value": "#2c3a4f"
+      },
+      {
+        "count": 5,
+        "value": "#2876de"
+      },
+      {
+        "count": 5,
+        "value": "#005cbf"
+      },
+      {
+        "count": 4,
+        "value": "#34465e"
+      },
+      {
+        "count": 3,
+        "value": "#d4694a"
+      },
+      {
+        "count": 1,
+        "value": "#4796e0"
+      },
+      {
+        "count": 1,
+        "value": "#32a6a6"
+      },
+      {
+        "count": 1,
+        "value": "#d2b934"
+      },
+      {
+        "count": 1,
+        "value": "#ab60da"
+      }
+    ]
+  },
+  "forms": [],
+  "headings": [
+    {
+      "level": 1,
+      "text": "Dashboard"
+    },
+    {
+      "level": 2,
+      "text": "Optimizer"
+    },
+    {
+      "level": 2,
+      "text": "Performance & activity"
+    }
+  ],
+  "health": {
+    "errors": [],
+    "failed_requests": []
+  },
+  "lang": "en",
+  "layouts": [
+    {
+      "blocks": [
+        {
+          "background": "#151c29",
+          "h": 900,
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 1,
+          "tag": "aside",
+          "w": 60,
+          "y": 0
+        },
+        {
+          "gap": 16,
+          "h": 80,
+          "heading": "Dashboard",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 1,
+          "tag": "header",
+          "w": 1328,
+          "y": 0
+        },
+        {
+          "column": {
+            "max_w": 480,
+            "pad": [
+              0,
+              0
+            ],
+            "w": 320,
+            "x": 82
+          },
+          "h": 2277,
+          "heading": "Optimizer",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 4,
+          "tag": "main",
+          "w": 1328,
+          "y": 80
+        },
+        {
+          "h": 331,
+          "heading": "Optimizer",
+          "pad": [
+            0,
+            0,
+            0,
+            20
+          ],
+          "per_row": 3,
+          "tag": "section",
+          "w": 1328,
+          "y": 792
+        },
+        {
+          "h": 615,
+          "heading": "Performance & activity",
+          "pad": [
+            0,
+            0,
+            0,
+            20
+          ],
+          "per_row": 2,
+          "tag": "section",
+          "w": 1328,
+          "y": 1167
+        },
+        {
+          "gap": 24,
+          "h": 89,
+          "pad": [
+            60,
+            0,
+            12,
+            0
+          ],
+          "per_row": 1,
+          "tag": "footer",
+          "w": 1328,
+          "y": 2357
+        }
+      ],
+      "page_h": 2446,
+      "page_w": 1440,
+      "type": {
+        "body": 14,
+        "h1": 24,
+        "h2": 20,
+        "h3": 0
+      },
+      "width": 1440
+    },
+    {
+      "blocks": [
+        {
+          "background": "#151c29",
+          "h": 900,
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 1,
+          "tag": "aside",
+          "w": 60,
+          "y": 0
+        },
+        {
+          "gap": 16,
+          "h": 80,
+          "heading": "Dashboard",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 3,
+          "tag": "header",
+          "w": 656,
+          "y": 0
+        },
+        {
+          "h": 3172,
+          "heading": "Optimizer",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 4,
+          "tag": "main",
+          "w": 656,
+          "y": 80
+        },
+        {
+          "h": 615,
+          "heading": "Optimizer",
+          "pad": [
+            0,
+            0,
+            0,
+            20
+          ],
+          "per_row": 2,
+          "tag": "section",
+          "w": 656,
+          "y": 1469
+        },
+        {
+          "h": 549,
+          "heading": "Performance & activity",
+          "pad": [
+            0,
+            0,
+            0,
+            20
+          ],
+          "per_row": 3,
+          "tag": "section",
+          "w": 656,
+          "y": 2128
+        },
+        {
+          "gap": 24,
+          "h": 89,
+          "pad": [
+            60,
+            0,
+            12,
+            0
+          ],
+          "per_row": 1,
+          "tag": "footer",
+          "w": 656,
+          "y": 3252
+        }
+      ],
+      "page_h": 3341,
+      "page_w": 768,
+      "type": {
+        "body": 14,
+        "h1": 24,
+        "h2": 20,
+        "h3": 0
+      },
+      "width": 768
+    },
+    {
+      "blocks": [
+        {
+          "background": "#151c29",
+          "h": 900,
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 1,
+          "tag": "aside",
+          "w": 60,
+          "y": 0
+        },
+        {
+          "gap": 12,
+          "h": 98,
+          "heading": "Dashboard",
+          "pad": [
+            20,
+            0,
+            0,
+            0
+          ],
+          "per_row": 2,
+          "tag": "header",
+          "w": 302,
+          "y": 0
+        },
+        {
+          "h": 4274,
+          "heading": "Optimizer",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 19,
+          "tag": "main",
+          "w": 302,
+          "y": 98
+        },
+        {
+          "h": 929,
+          "heading": "Optimizer",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 2,
+          "tag": "section",
+          "w": 302,
+          "y": 2051
+        },
+        {
+          "h": 719,
+          "heading": "Performance & activity",
+          "pad": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "per_row": 3,
+          "tag": "section",
+          "w": 302,
+          "y": 3024
+        },
+        {
+          "gap": 24,
+          "h": 89,
+          "pad": [
+            60,
+            0,
+            12,
+            0
+          ],
+          "per_row": 2,
+          "tag": "footer",
+          "w": 302,
+          "y": 4372
+        }
+      ],
+      "page_h": 4461,
+      "page_w": 390,
+      "type": {
+        "body": 14,
+        "h1": 24,
+        "h2": 20,
+        "h3": 0
+      },
+      "width": 390
+    }
+  ],
+  "links": [
+    {
+      "href": "http://127.0.0.1:63075/",
+      "text": "Seller Portal"
+    },
+    {
+      "href": "http://127.0.0.1:63075/",
+      "text": "Dashboard Summary overview"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Sales/SalesTrend",
+      "text": "Sales Trends, orders & returns"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Products",
+      "text": "Products ROI, inventory value, COGS"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Restock",
+      "text": "Restock Forecasting Inventory restock management"
+    },
+    {
+      "href": "http://127.0.0.1:63075/KeywordRanking",
+      "text": "Keyword Ranking Keyword rank tracker"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Ads",
+      "text": "Ads Insights Performance & actionable insights"
+    },
+    {
+      "href": "http://127.0.0.1:63075/ScaleOptimizer",
+      "text": "Optimizer Recommendations, rules & ad group signals"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Automation",
+      "text": "Automation Automate ads optimisation"
+    },
+    {
+      "href": "http://127.0.0.1:63075/MassCampaigns",
+      "text": "Mass Campaigns Create bulk campaigns"
+    },
+    {
+      "href": "http://127.0.0.1:63075/StrategyExperts",
+      "text": "Strategy Experts Video strategies from experts"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Identity/Account/Billing",
+      "text": "23 Days Trial Left"
+    },
+    {
+      "href": "http://127.0.0.1:63075/#",
+      "text": "Support"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Identity/Account/Billing",
+      "text": "Account"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Settings/Onboarding",
+      "text": "Connect to Amazon"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Settings/User",
+      "text": "Sub users"
+    },
+    {
+      "href": "http://127.0.0.1:63075/",
+      "text": "Log out"
+    },
+    {
+      "href": "http://127.0.0.1:63075/ScaleOptimizer",
+      "text": "See 26 suggested optimizations"
+    },
+    {
+      "href": "http://127.0.0.1:63075/ScaleOptimizer",
+      "text": "Customize"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Products",
+      "text": "SKU-A1"
+    },
+    {
+      "href": "http://127.0.0.1:63075/Products",
+      "text": "SKU-B2"
+    },
+    {
+      "href": "http://127.0.0.1:63075/#",
+      "text": "Privacy Policy"
+    }
+  ],
+  "meta": {
+    "description": "",
+    "icons": [
+      "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%278%27 fill=%27%235a3fd0%27/%3E%3C/svg%3E"
+    ],
+    "og_image": "",
+    "og_title": "",
+    "theme_color": ""
+  },
+  "outline": [
+    {
+      "background": "#151c29",
+      "box": {
+        "h": 900,
+        "w": 60,
+        "x": 0,
+        "y": 0
+      },
+      "class": "rail",
+      "color": "#212529",
+      "depth": 2,
+      "display": "block",
+      "font": "16px 400",
+      "id": "rail",
+      "tag": "aside"
+    },
+    {
+      "box": {
+        "h": 48,
+        "w": 164,
+        "x": 0,
+        "y": 16
+      },
+      "class": "brand",
+      "color": "#ffffff",
+      "depth": 4,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/",
+      "tag": "a",
+      "text": "Seller Portal"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 24,
+        "x": 18,
+        "y": 28
+      },
+      "color": "#ffffff",
+      "depth": 6,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 681,
+        "w": 300,
+        "x": 0,
+        "y": 80
+      },
+      "class": "rail-list",
+      "color": "#212529",
+      "depth": 3,
+      "display": "block",
+      "font": "16px 400",
+      "id": "rail-list",
+      "tag": "ul"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 88
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/",
+      "tag": "a",
+      "text": "Dashboard Summary overview"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 96
+      },
+      "color": "#d7dbe3",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 157
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/Sales/SalesTrend",
+      "tag": "a",
+      "text": "Sales Trends, orders & returns"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 165
+      },
+      "color": "#7fd3a4",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 226
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/Products",
+      "tag": "a",
+      "text": "Products ROI, inventory value, COGS"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 234
+      },
+      "color": "#f2a7c3",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 295
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/Restock",
+      "tag": "a",
+      "text": "Restock Forecasting Inventory restock management"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 303
+      },
+      "color": "#f6d36b",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 364
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/KeywordRanking",
+      "tag": "a",
+      "text": "Keyword Ranking Keyword rank tracker"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 372
+      },
+      "color": "#f4a26a",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 433
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/Ads",
+      "tag": "a",
+      "text": "Ads Insights Performance & actionable insights"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 441
+      },
+      "color": "#b79cf7",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 502
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/ScaleOptimizer",
+      "tag": "a",
+      "text": "Optimizer Recommendations, rules & ad group signals"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 510
+      },
+      "color": "#b79cf7",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 571
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/Automation",
+      "tag": "a",
+      "text": "Automation Automate ads optimisation"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 579
+      },
+      "color": "#79c3f2",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 640
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/MassCampaigns",
+      "tag": "a",
+      "text": "Mass Campaigns Create bulk campaigns"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 648
+      },
+      "color": "#f39c50",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 44,
+        "w": 300,
+        "x": 0,
+        "y": 709
+      },
+      "color": "#cccccc",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/StrategyExperts",
+      "tag": "a",
+      "text": "Strategy Experts Video strategies from experts"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 28,
+        "x": 16,
+        "y": 717
+      },
+      "color": "#8fd6b0",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 80,
+        "w": 1328,
+        "x": 80,
+        "y": 0
+      },
+      "class": "topbar",
+      "color": "#212529",
+      "depth": 3,
+      "display": "flex",
+      "flex": "row",
+      "font": "16px 400",
+      "tag": "header"
+    },
+    {
+      "box": {
+        "h": 28,
+        "w": 146,
+        "x": 80,
+        "y": 26
+      },
+      "class": "page-title",
+      "color": "#2c3a4f",
+      "depth": 4,
+      "font": "24px 500",
+      "id": "page-title",
+      "tag": "h1",
+      "text": "Dashboard"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 24,
+        "x": 80,
+        "y": 28
+      },
+      "color": "#4796e0",
+      "depth": 6,
+      "font": "24px 500",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 16,
+        "w": 16,
+        "x": 593,
+        "y": 32
+      },
+      "color": "#2c3a4f",
+      "depth": 6,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 20,
+        "w": 446,
+        "x": 617,
+        "y": 30
+      },
+      "color": "#212529",
+      "depth": 6,
+      "font": "16px 400",
+      "name": "",
+      "placeholder": "Search our knowledge base",
+      "tag": "input",
+      "type": "search"
+    },
+    {
+      "background": "#4444ff",
+      "box": {
+        "h": 38,
+        "w": 142,
+        "x": 1094,
+        "y": 21
+      },
+      "class": "trial",
+      "color": "#ffffff",
+      "depth": 5,
+      "font": "16px 400",
+      "href": "http://127.0.0.1:63075/Identity/Account/Billing",
+      "tag": "a",
+      "text": "23 Days Trial Left"
+    },
+    {
+      "box": {
+        "h": 38,
+        "w": 156,
+        "x": 1252,
+        "y": 21
+      },
+      "class": "user-btn",
+      "color": "#34465e",
+      "depth": 6,
+      "font": "16px 400",
+      "id": "user-btn",
+      "tag": "button",
+      "text": "Demo Seller"
+    },
+    {
+      "box": {
+        "h": 22,
+        "w": 22,
+        "x": 1260,
+        "y": 29
+      },
+      "color": "#34465e",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 2277,
+        "w": 1328,
+        "x": 80,
+        "y": 80
+      },
+      "color": "#212529",
+      "depth": 3,
+      "display": "block",
+      "font": "16px 400",
+      "id": "view",
+      "tag": "main"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 40,
+        "w": 230,
+        "x": 80,
+        "y": 100
+      },
+      "class": "date-btn",
+      "color": "#212529",
+      "depth": 8,
+      "font": "16px 400",
+      "id": "date-btn",
+      "tag": "button",
+      "text": "24 Oct 26 - 22 Nov 26"
+    },
+    {
+      "box": {
+        "h": 16,
+        "w": 10,
+        "x": 95,
+        "y": 112
+      },
+      "color": "#212529",
+      "depth": 9,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 38,
+        "w": 300,
+        "x": 326,
+        "y": 100
+      },
+      "class": "select",
+      "color": "#adb5bd",
+      "depth": 8,
+      "font": "16px 400",
+      "id": "product-btn",
+      "tag": "button",
+      "text": "Select products"
+    },
+    {
+      "background": "#34465e",
+      "box": {
+        "h": 40,
+        "w": 109,
+        "x": 80,
+        "y": 156
+      },
+      "class": "btn-dark",
+      "color": "#ffffff",
+      "depth": 7,
+      "font": "16px 400",
+      "id": "apply",
+      "tag": "button",
+      "text": "Apply filter"
+    },
+    {
+      "box": {
+        "h": 34,
+        "w": 34,
+        "x": 690,
+        "y": 131
+      },
+      "color": "#4f7fd9",
+      "depth": 8,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 18,
+        "w": 18,
+        "x": 1001,
+        "y": 150
+      },
+      "color": "#212529",
+      "depth": 9,
+      "font": "18px 600",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 18,
+        "w": 242,
+        "x": 1140,
+        "y": 150
+      },
+      "class": "stat-link",
+      "color": "#2876de",
+      "depth": 8,
+      "font": "15px 400",
+      "href": "http://127.0.0.1:63075/ScaleOptimizer",
+      "tag": "a",
+      "text": "See 26 suggested optimizations"
+    },
+    {
+      "box": {
+        "h": 16,
+        "w": 16,
+        "x": 1366,
+        "y": 151
+      },
+      "color": "#2876de",
+      "depth": 9,
+      "font": "15px 400",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 36,
+        "w": 125,
+        "x": 106,
+        "y": 256
+      },
+      "color": "#4796e0",
+      "depth": 11,
+      "font": "24px 600",
+      "tag": "h4",
+      "text": "Today"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 125,
+        "x": 106,
+        "y": 292
+      },
+      "color": "#adb5bd",
+      "depth": 11,
+      "font": "14px 400",
+      "tag": "p",
+      "text": "22 November 2026"
+    },
+    {
+      "box": {
+        "h": 36,
+        "w": 123,
+        "x": 442,
+        "y": 256
+      },
+      "color": "#32a6a6",
+      "depth": 11,
+      "font": "24px 600",
+      "tag": "h4",
+      "text": "Yesterday"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 123,
+        "x": 442,
+        "y": 292
+      },
+      "color": "#adb5bd",
+      "depth": 11,
+      "font": "14px 400",
+      "tag": "p",
+      "text": "21 November 2026"
+    },
+    {
+      "box": {
+        "h": 36,
+        "w": 139,
+        "x": 777,
+        "y": 256
+      },
+      "color": "#d2b934",
+      "depth": 11,
+      "font": "24px 600",
+      "tag": "h4",
+      "text": "7 Days"
+    },
+    {
+      "box": {
+        "h": 48,
+        "w": 139,
+        "x": 777,
+        "y": 292
+      },
+      "color": "#adb5bd",
+      "depth": 11,
+      "font": "14px 400",
+      "tag": "p",
+      "text": "15 November 2026 — 21 November 2026"
+    },
+    {
+      "box": {
+        "h": 36,
+        "w": 127,
+        "x": 1113,
+        "y": 256
+      },
+      "color": "#ab60da",
+      "depth": 11,
+      "font": "24px 600",
+      "tag": "h4",
+      "text": "30 Days"
+    },
+    {
+      "box": {
+        "h": 48,
+        "w": 127,
+        "x": 1113,
+        "y": 292
+      },
+      "color": "#adb5bd",
+      "depth": 11,
+      "font": "14px 400",
+      "tag": "p",
+      "text": "23 October 2026 — 21 November 2026"
+    },
+    {
+      "box": {
+        "h": 331,
+        "w": 1328,
+        "x": 80,
+        "y": 792
+      },
+      "class": "section",
+      "color": "#212529",
+      "depth": 5,
+      "display": "block",
+      "font": "16px 400",
+      "id": "sec-opt",
+      "tag": "section"
+    },
+    {
+      "background": "#4f86d8",
+      "box": {
+        "h": 20,
+        "w": 20,
+        "x": 100,
+        "y": 800
+      },
+      "class": "collapse",
+      "color": "#212529",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "button"
+    },
+    {
+      "box": {
+        "h": 23,
+        "w": 90,
+        "x": 132,
+        "y": 799
+      },
+      "color": "#212529",
+      "depth": 7,
+      "font": "20px 600",
+      "tag": "h2",
+      "text": "Optimizer"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 36,
+        "w": 99,
+        "x": 234,
+        "y": 792
+      },
+      "class": "btn-outline linkbtn",
+      "color": "#2c3a4f",
+      "depth": 7,
+      "font": "15px 400",
+      "href": "http://127.0.0.1:63075/ScaleOptimizer",
+      "tag": "a",
+      "text": "Customize"
+    },
+    {
+      "box": {
+        "h": 15,
+        "w": 15,
+        "x": 345,
+        "y": 803
+      },
+      "color": "#adb5bd",
+      "depth": 8,
+      "font": "15px 400",
+      "tag": "svg"
+    },
+    {
+      "background": "#34465e",
+      "box": {
+        "h": 36,
+        "w": 109,
+        "x": 121,
+        "y": 1066
+      },
+      "class": "btn-dark fix",
+      "color": "#ffffff",
+      "depth": 11,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "Fix once"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 36,
+        "w": 111,
+        "x": 238,
+        "y": 1066
+      },
+      "class": "btn-outline details",
+      "color": "#2c3a4f",
+      "depth": 11,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "See Details"
+    },
+    {
+      "background": "#34465e",
+      "box": {
+        "h": 36,
+        "w": 109,
+        "x": 404,
+        "y": 1066
+      },
+      "class": "btn-dark fix",
+      "color": "#ffffff",
+      "depth": 11,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "Fix once"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 36,
+        "w": 111,
+        "x": 521,
+        "y": 1066
+      },
+      "class": "btn-outline details",
+      "color": "#2c3a4f",
+      "depth": 11,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "See Details"
+    },
+    {
+      "background": "#34465e",
+      "box": {
+        "h": 36,
+        "w": 109,
+        "x": 687,
+        "y": 1066
+      },
+      "class": "btn-dark fix",
+      "color": "#ffffff",
+      "depth": 11,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "Fix once"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 36,
+        "w": 111,
+        "x": 804,
+        "y": 1066
+      },
+      "class": "btn-outline details",
+      "color": "#2c3a4f",
+      "depth": 11,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "See Details"
+    },
+    {
+      "box": {
+        "h": 615,
+        "w": 1328,
+        "x": 80,
+        "y": 1167
+      },
+      "class": "section",
+      "color": "#212529",
+      "depth": 5,
+      "display": "block",
+      "font": "16px 400",
+      "id": "sec-perf",
+      "tag": "section"
+    },
+    {
+      "background": "#4f86d8",
+      "box": {
+        "h": 20,
+        "w": 20,
+        "x": 100,
+        "y": 1168
+      },
+      "class": "collapse",
+      "color": "#212529",
+      "depth": 7,
+      "font": "16px 400",
+      "tag": "button"
+    },
+    {
+      "box": {
+        "h": 23,
+        "w": 210,
+        "x": 132,
+        "y": 1167
+      },
+      "color": "#212529",
+      "depth": 7,
+      "font": "20px 600",
+      "tag": "h2",
+      "text": "Performance & activity"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 38,
+        "w": 140,
+        "x": 100,
+        "y": 1214
+      },
+      "class": "pc-preset-btn",
+      "color": "#212529",
+      "depth": 10,
+      "font": "16px 400",
+      "id": "pc-preset",
+      "tag": "button",
+      "text": "Custom"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 8,
+        "x": 340,
+        "y": 1221
+      },
+      "class": "pc-x",
+      "color": "#6c757d",
+      "depth": 11,
+      "font": "10px 400",
+      "tag": "button",
+      "text": "✕"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 8,
+        "x": 485,
+        "y": 1221
+      },
+      "class": "pc-x",
+      "color": "#6c757d",
+      "depth": 11,
+      "font": "10px 400",
+      "tag": "button",
+      "text": "✕"
+    },
+    {
+      "box": {
+        "h": 24,
+        "w": 8,
+        "x": 654,
+        "y": 1221
+      },
+      "class": "pc-x",
+      "color": "#6c757d",
+      "depth": 11,
+      "font": "10px 400",
+      "tag": "button",
+      "text": "✕"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 38,
+        "w": 48,
+        "x": 684,
+        "y": 1214
+      },
+      "class": "pc-add",
+      "color": "#212529",
+      "depth": 10,
+      "font": "22px 400",
+      "id": "chip-add",
+      "tag": "button",
+      "text": "+"
+    },
+    {
+      "box": {
+        "h": 38,
+        "w": 238,
+        "x": 1170,
+        "y": 1214
+      },
+      "class": "pc-gran",
+      "color": "#212529",
+      "depth": 8,
+      "font": "16px 400",
+      "id": "bucket",
+      "role": "radiogroup",
+      "tag": "div",
+      "text": "Days Weeks Months"
+    },
+    {
+      "background": "#dee2e6",
+      "box": {
+        "h": 38,
+        "w": 70,
+        "x": 1170,
+        "y": 1214
+      },
+      "class": "on",
+      "color": "#212529",
+      "depth": 9,
+      "font": "16px 400",
+      "tag": "button",
+      "text": "Days"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 38,
+        "w": 81,
+        "x": 1239,
+        "y": 1214
+      },
+      "color": "#212529",
+      "depth": 9,
+      "font": "16px 400",
+      "tag": "button",
+      "text": "Weeks"
+    },
+    {
+      "background": "#f7f9fa",
+      "box": {
+        "h": 38,
+        "w": 88,
+        "x": 1321,
+        "y": 1214
+      },
+      "color": "#adb5bd",
+      "depth": 9,
+      "font": "16px 400",
+      "tag": "button",
+      "text": "Months"
+    },
+    {
+      "box": {
+        "h": 325,
+        "w": 1308,
+        "x": 100,
+        "y": 1260
+      },
+      "color": "#212529",
+      "depth": 8,
+      "font": "16px 400",
+      "id": "chart",
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 175,
+        "w": 1308,
+        "x": 100,
+        "y": 1585
+      },
+      "color": "#212529",
+      "depth": 8,
+      "font": "16px 400",
+      "id": "chart-rules",
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 1326,
+        "x": 82,
+        "y": 1826
+      },
+      "class": "tabs",
+      "color": "#212529",
+      "depth": 6,
+      "font": "16px 400",
+      "id": "tabs",
+      "role": "tablist",
+      "tag": "div",
+      "text": "Today Yesterday 7 Days 14 Days 30 Days Sales by date Account-level fees"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 65,
+        "x": 82,
+        "y": 1826
+      },
+      "class": "on",
+      "color": "#212529",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "Today"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 92,
+        "x": 151,
+        "y": 1826
+      },
+      "color": "#6c757d",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "Yesterday"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 70,
+        "x": 247,
+        "y": 1826
+      },
+      "color": "#6c757d",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "7 Days"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 78,
+        "x": 321,
+        "y": 1826
+      },
+      "color": "#6c757d",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "14 Days"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 80,
+        "x": 403,
+        "y": 1826
+      },
+      "color": "#6c757d",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "30 Days"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 116,
+        "x": 487,
+        "y": 1826
+      },
+      "color": "#6c757d",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "Sales by date"
+    },
+    {
+      "box": {
+        "h": 40,
+        "w": 152,
+        "x": 607,
+        "y": 1826
+      },
+      "color": "#6c757d",
+      "depth": 7,
+      "font": "15px 400",
+      "role": "tab",
+      "tag": "button",
+      "text": "Account-level fees"
+    },
+    {
+      "box": {
+        "h": 15,
+        "w": 15,
+        "x": 95,
+        "y": 1898
+      },
+      "color": "#6c757d",
+      "depth": 8,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "background": "#ffffff",
+      "box": {
+        "h": 20,
+        "w": 251,
+        "x": 118,
+        "y": 1896
+      },
+      "color": "#000000",
+      "depth": 8,
+      "font": "15px 400",
+      "id": "instant",
+      "name": "",
+      "placeholder": "Instant search",
+      "tag": "input",
+      "type": "text"
+    },
+    {
+      "box": {
+        "h": 20,
+        "w": 94,
+        "x": 398,
+        "y": 1896
+      },
+      "class": "plain-btn",
+      "color": "#212529",
+      "depth": 7,
+      "font": "15px 400",
+      "tag": "button",
+      "text": "Columns"
+    },
+    {
+      "box": {
+        "h": 16,
+        "w": 16,
+        "x": 404,
+        "y": 1898
+      },
+      "color": "#212529",
+      "depth": 8,
+      "font": "15px 400",
+      "tag": "svg"
+    },
+    {
+      "background": "#34465e",
+      "box": {
+        "h": 38,
+        "w": 98,
+        "x": 508,
+        "y": 1887
+      },
+      "class": "btn-dark",
+      "color": "#ffffff",
+      "depth": 7,
+      "font": "15px 400",
+      "id": "download",
+      "tag": "button",
+      "text": "Download"
+    },
+    {
+      "box": {
+        "h": 15,
+        "w": 44,
+        "x": 184,
+        "y": 2101
+      },
+      "color": "#2876de",
+      "depth": 12,
+      "font": "12px 500",
+      "href": "http://127.0.0.1:63075/Products",
+      "tag": "a",
+      "text": "SKU-A1"
+    },
+    {
+      "box": {
+        "h": 15,
+        "w": 46,
+        "x": 184,
+        "y": 2202
+      },
+      "color": "#2876de",
+      "depth": 12,
+      "font": "12px 500",
+      "href": "http://127.0.0.1:63075/Products",
+      "tag": "a",
+      "text": "SKU-B2"
+    },
+    {
+      "box": {
+        "h": 89,
+        "w": 1328,
+        "x": 80,
+        "y": 2357
+      },
+      "class": "footer",
+      "color": "#adb5bd",
+      "depth": 3,
+      "display": "flex",
+      "flex": "row",
+      "font": "14px 400",
+      "tag": "footer"
+    },
+    {
+      "box": {
+        "h": 17,
+        "w": 89,
+        "x": 1319,
+        "y": 2417
+      },
+      "color": "#212529",
+      "depth": 4,
+      "font": "14px 400",
+      "href": "http://127.0.0.1:63075/#",
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "background": "#1d3da8",
+      "box": {
+        "h": 48,
+        "w": 48,
+        "x": 1372,
+        "y": 752
+      },
+      "class": "fab fab-help",
+      "color": "#212529",
+      "depth": 2,
+      "font": "16px 400",
+      "tag": "button"
+    },
+    {
+      "box": {
+        "h": 26,
+        "w": 26,
+        "x": 1383,
+        "y": 763
+      },
+      "color": "#212529",
+      "depth": 3,
+      "font": "16px 400",
+      "tag": "svg"
+    },
+    {
+      "background": "#425b76",
+      "box": {
+        "h": 60,
+        "w": 60,
+        "x": 1364,
+        "y": 824
+      },
+      "class": "fab fab-chat",
+      "color": "#ffffff",
+      "depth": 2,
+      "font": "16px 400",
+      "tag": "button"
+    },
+    {
+      "box": {
+        "h": 30,
+        "w": 30,
+        "x": 1379,
+        "y": 839
+      },
+      "color": "#ffffff",
+      "depth": 3,
+      "font": "16px 400",
+      "tag": "svg"
+    }
+  ],
+  "page": {
+    "h": 2446,
+    "w": 1440
+  },
+  "text": "Seller Portal Dashboard Summary overview Sales Trends, orders & returns Products ROI, inventory value, COGS Restock Forecasting Inventory restock management Keyword Ranking Keyword rank tracker Ads Insights Performance & actionable insights Optimizer Recommendations, rules & ad group signals Automation Automate ads optimisation Mass Campaigns Create bulk campaigns Strategy Experts Video strategies from experts Dashboard 23 Days Trial Left Demo Seller 24 Oct 26 - 22 Nov 26 Select products Apply filter SAVED BY AUTOMATIONS $0.00 USD TIME SAVED 0m 00s APPLY AUTOMATIONS TO START SAVING See 26 suggested optimizations Today 22 November 2026 Account fees $0.00 Sales $64.50 Overall P&L ($18.40) Orders / Units / Refunds 2 / 2 / 0 PPC Orders / PPC Units 1 / 1 Advertising Cost ($28.70) Est. Payout ($2.15) ROI -84.2% Margin -28.5% ACOS 132.4% TACOS 44.5% Yesterday 21 November 2026 Account fees $0.00 Sales $96.40 Overall P&L ($61.30) Orders / Units / Refunds 4 / 4 / 1 PPC Orders / PPC Units 2 / 2 Advertising Cost ($92.10) Est. Payout ($41.80) ROI -210.6% Margin -63.6% ACOS 181.2% TACOS 95.5% 7 Days 15 November 2026 — 21 November 2026 Account fees $0.00 Sales $212.80 Overall P&L ($288.40) Orders / Units / Refunds 9 / 9 / 2 PPC Orders / PPC Units 4 / 4 Advertising Cost ($301.50) Est. Payout ($244.90) ROI -402.3% Margin -135.5% ACOS 341.8% TACOS 141.7% 30 Days 23 October 2026 — 21 November 2026 Account fees $0.00 Sales $2,240.60 Overall P&L ($1,384.10) Orders / Units / Refunds 92 / 95 / 7 PPC Orders / PPC Units 47 / 48 Advertising Cost ($1,126.30) Est. Payout ($702.60) ROI -148.9% Margin -61.8% ACOS 96.4% TACOS 50.3% Optimizer Customize Recommendations refresh daily. Negate No Sale Bleeders on keyword training rope 34 clicks 0 orders Add keyword as negative exact Fix once See Details Negate No Sale Bleeders on keyword battle rope set 27 clicks 0 orders Add keyword as negative exact Fix once See Details Negate No Sale Bleeders on keyword home gym rope 22 clicks 0 orders Add keyword as negative exact Fix once See Details Performance & activity Custom TACOS ✕ PPC Sales ✕ Organic sales ✕ + Days Weeks Months 0% $0 40% $200 80% $400 120% $600 160% $800 200% $1k 0 1 10/23 10/24 10/25 10/26 10/27 10/28 10/29 10/30 10/31 11/1 11/2 11/3 11/4 11/5 11/6 11/7 11/8 11/9 11/10 11/11 11/12 11/13 11/14 11/15 11/16 11/17 11/18 11/19 11/20 11/21 Rule/Strategy assigned Rule/Strategy edited Today Yesterday 7 Days 14 Days 30 Days Sales by date Account-level fees Columns Download Product ↓ Title ↓ Orders ↓ Units ↓ Sales ↓ Profits ↓ Ads ↓ ACOS ↓ TACOS ↓ Organic Units ↓ Promo Units ↓ PPC Sales ↓ PPC Orders ↓ PPC Units ↓ ROI ↓ Margin ↓ Velocity ↓ Payout ↓ P&L Per Unit ↓ ▾ Sum 3 3 $64.48 ($18.40) $28.70 143.57% 44.5% 2 1 $19.99 1 1 -36.9% -28.5% 3 $18.95 ($6.13) Weighted Training Rope, 30 ft, Blue SKU-A1, DEMO-01-BLU, Stock: 140 , 70d Supply 2 2 $39.98 $1.42 $4.80 19.40% 12.0% 1 1 $19.99 1 1 7.1% 3.6% 2.1 $21.55 $0.71 Weighted Training Rope, 40 ft, Grey SKU-B2, DEMO-02-GRY, Stock: 72 , 75d Supply 1 1 $24.50 ($19.82) $23.90 97.6% 1 $0.00 -80.9% -80.9% 0.9 ($2.60) ($19.82) Items 1 to 2 of 2 Updated just now - Processed: 0 ms © 2026 – Seller Portal Privacy Policy",
+  "title": "Dashboard - Seller Portal",
+  "unreadable_stylesheets": 0,
+  "url": "http://127.0.0.1:63075/",
+  "viewport": {
+    "h": 900,
+    "w": 1440
+  }
+}

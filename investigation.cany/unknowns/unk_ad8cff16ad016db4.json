@@ -1,0 +1,20 @@
+{
+  "id": "unk_ad8cff16ad016db4",
+  "revision": 2,
+  "question": "The project's automatic comparison was captured from the browser debugging address (an empty page), not the signed-in dashboard, so the likeness check has nothing real to compare against.",
+  "severity": "medium",
+  "domain": "web",
+  "status": "blocked",
+  "probes": [
+    "Re-capture the target as the dashboard itself (needs a signed-in capture, which web_site_capture's private browser can't do)",
+    "Compare by eye against the walkthrough screenshots (ev_da587659…, ev_56a61b3b…)"
+  ],
+  "evidence_for": [
+    "ev_da587659c10f8483f41eb9fe9df9c9c189305a7a1d8eff6f1adb4a2145ee7dea",
+    "ev_56a61b3bfa340351794f8f3a80297c48c34598c3132fae4397a1e159b3dc1c3b",
+    "ev_5c128b8eec30587d7a2238ac8e4293f0dc320fcb9c3d582dad42836eeb25955d",
+    "ev_b55d5586ed10fa020100147e85b7a43ac2d8bca1c947cff720b33c7ac7e34fe5"
+  ],
+  "evidence_against": [],
+  "resolution": "Still true: the automatic likeness score compares against the blank debugging page, so it can't be raised by more building. Checked by eye instead against walkthrough screenshots at 1440 px and 390 px (my build: ev_5c128b8e…, ev_b55d5586…); layout, colours, spacing and the drawer match closely. Fixing it needs the project's target to be re-captured from the signed-in dashboard."
+}

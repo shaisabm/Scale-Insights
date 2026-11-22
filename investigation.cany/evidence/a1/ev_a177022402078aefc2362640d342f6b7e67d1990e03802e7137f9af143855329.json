@@ -1,0 +1,63 @@
+{
+  "id": "ev_a177022402078aefc2362640d342f6b7e67d1990e03802e7137f9af143855329",
+  "subject": {
+    "kind": "website",
+    "name": "https://portal.scaleinsights.com/StrategyExperts"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "kind": "rows",
+      "limit": 20,
+      "list": "field_names"
+    },
+    "source": {
+      "evidence_id": "ev_a84dd8e5139ea7d40bd9298c9f170ee7cb32966a68825fafbe39d5c0613299d7",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 7,
+      "next_offset": null,
+      "status": "page",
+      "total": 7
+    },
+    "from_evidence": "ev_a84dd8e5139ea7d40bd9298c9f170ee7cb32966a68825fafbe39d5c0613299d7",
+    "from_tool": "core_evidence_browse",
+    "shown": {
+      "items": [
+        "action",
+        "artifacts",
+        "index",
+        "screenshot",
+        "status",
+        "step_id",
+        "url"
+      ],
+      "list": "field_names",
+      "offset": 0,
+      "total": 7
+    }
+  },
+  "summary": "Part of core_evidence_browse evidence (page).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 7,
+    "total": 7
+  },
+  "locations": [],
+  "links": [
+    "ev_a84dd8e5139ea7d40bd9298c9f170ee7cb32966a68825fafbe39d5c0613299d7"
+  ]
+}

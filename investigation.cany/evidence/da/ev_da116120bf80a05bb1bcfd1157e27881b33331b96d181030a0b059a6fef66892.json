@@ -1,0 +1,97 @@
+{
+  "id": "ev_da116120bf80a05bb1bcfd1157e27881b33331b96d181030a0b059a6fef66892",
+  "subject": {
+    "kind": "website",
+    "name": "about:blank"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "fields": [
+        "step_id",
+        "status",
+        "error"
+      ],
+      "kind": "rows",
+      "list": "steps"
+    },
+    "source": {
+      "evidence_id": "ev_0e6e24b96d7d4a0e16f322e455c18bae23b01f7425c48f241b8dc1381c1704db",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 9,
+      "next_offset": null,
+      "status": "page",
+      "total": 9
+    },
+    "from_evidence": "ev_0e6e24b96d7d4a0e16f322e455c18bae23b01f7425c48f241b8dc1381c1704db",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "items": [
+        {
+          "status": "ok",
+          "step_id": "open"
+        },
+        {
+          "status": "ok",
+          "step_id": "create"
+        },
+        {
+          "status": "ok",
+          "step_id": "bid"
+        },
+        {
+          "status": "ok",
+          "step_id": "place"
+        },
+        {
+          "status": "ok",
+          "step_id": "top0"
+        },
+        {
+          "status": "ok",
+          "step_id": "top1"
+        },
+        {
+          "status": "ok",
+          "step_id": "tgt"
+        },
+        {
+          "status": "ok",
+          "step_id": "match"
+        },
+        {
+          "error": "no element matches \"[data-name]\"",
+          "status": "error",
+          "step_id": "name"
+        }
+      ],
+      "list": "steps",
+      "offset": 0,
+      "total": 9
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (page).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 9,
+    "total": 9
+  },
+  "locations": [],
+  "links": [
+    "ev_0e6e24b96d7d4a0e16f322e455c18bae23b01f7425c48f241b8dc1381c1704db"
+  ]
+}

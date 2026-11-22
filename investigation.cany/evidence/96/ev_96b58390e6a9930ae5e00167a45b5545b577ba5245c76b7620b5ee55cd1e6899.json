@@ -1,0 +1,147 @@
+{
+  "id": "ev_96b58390e6a9930ae5e00167a45b5545b577ba5245c76b7620b5ee55cd1e6899",
+  "subject": {
+    "kind": "website",
+    "name": "about:blank"
+  },
+  "operation": "web_walkthrough_record",
+  "params": {
+    "action_count": 7,
+    "endpoint": "http://127.0.0.1:63054",
+    "launched": true,
+    "sensitive_value_declarations": 0
+  },
+  "result": {
+    "aborted": null,
+    "action_count": 7,
+    "browser": {
+      "cleanup": "closed",
+      "product": "Chrome/158.0.8127.36",
+      "started_by": "craft-anything"
+    },
+    "environment": {
+      "requested": {
+        "bypass_service_workers": true,
+        "color_scheme": "light",
+        "device_scale_factor": 1.0,
+        "height": 2300,
+        "locale": "en-US",
+        "reduced_motion": true,
+        "timezone": "UTC",
+        "width": 1440
+      },
+      "settings": {
+        "locale": "applied",
+        "media": "applied",
+        "service_workers": "applied",
+        "timezone": "applied",
+        "viewport": "applied"
+      }
+    },
+    "events": {
+      "dropped": 0,
+      "families": [
+        "page_errors"
+      ],
+      "items": [],
+      "unavailable": []
+    },
+    "final_artifacts": null,
+    "keep_bodies": {
+      "header_values": false,
+      "request_body": false,
+      "response_body": false
+    },
+    "network": null,
+    "secret_redactions": 0,
+    "secrets_hidden": 0,
+    "start_url": "about:blank",
+    "starting_storage": {
+      "cookies_set": [],
+      "failed": [],
+      "storage_entries_set": 0
+    },
+    "steps": [
+      {
+        "action": "goto",
+        "index": 0,
+        "status": "ok",
+        "step_id": "open",
+        "url": "http://127.0.0.1:63012/"
+      },
+      {
+        "action": "click",
+        "index": 1,
+        "status": "ok",
+        "step_id": "weeks",
+        "url": "http://127.0.0.1:63012/"
+      },
+      {
+        "action": "click",
+        "index": 2,
+        "status": "ok",
+        "step_id": "presetopen",
+        "url": "http://127.0.0.1:63012/"
+      },
+      {
+        "action": "click",
+        "index": 3,
+        "status": "ok",
+        "step_id": "ppc",
+        "url": "http://127.0.0.1:63012/"
+      },
+      {
+        "action": "click",
+        "index": 4,
+        "status": "ok",
+        "step_id": "presetopen2",
+        "url": "http://127.0.0.1:63012/"
+      },
+      {
+        "action": "click",
+        "index": 5,
+        "status": "ok",
+        "step_id": "custom",
+        "url": "http://127.0.0.1:63012/"
+      },
+      {
+        "action": "click",
+        "index": 6,
+        "status": "ok",
+        "step_id": "rmtacos",
+        "url": "http://127.0.0.1:63012/"
+      }
+    ]
+  },
+  "summary": "Ran 7 of 7 scripted step(s) on about:blank.",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "cdp",
+    "engine_version": "1.3",
+    "host": "macos-aarch64"
+  },
+  "limitations": [
+    {
+      "code": "controlled_run",
+      "message": "This is one controlled run of scripted steps; different steps or timing would show different behaviour."
+    },
+    {
+      "code": "values_not_kept",
+      "message": "Request/response bodies are reduced to outlines, cookies and auth headers are dropped, and declared secrets are redacted in every encoding."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 7,
+    "total": 7
+  },
+  "locations": [
+    {
+      "kind": "url",
+      "value": "about:blank"
+    }
+  ],
+  "links": []
+}

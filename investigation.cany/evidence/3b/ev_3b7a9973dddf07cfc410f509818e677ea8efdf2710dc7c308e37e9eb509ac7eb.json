@@ -1,0 +1,77 @@
+{
+  "id": "ev_3b7a9973dddf07cfc410f509818e677ea8efdf2710dc7c308e37e9eb509ac7eb",
+  "subject": {
+    "kind": "website",
+    "name": "about:blank"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "fields": [
+        "step_id",
+        "status",
+        "error"
+      ],
+      "kind": "rows",
+      "list": "steps"
+    },
+    "source": {
+      "evidence_id": "ev_c8218b4b12148247607e4ed83bcd5a98d9a40ef1291c0e045c90c696d3742a18",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 4,
+      "next_offset": null,
+      "status": "page",
+      "total": 4
+    },
+    "from_evidence": "ev_c8218b4b12148247607e4ed83bcd5a98d9a40ef1291c0e045c90c696d3742a18",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "items": [
+        {
+          "status": "ok",
+          "step_id": "open"
+        },
+        {
+          "status": "ok",
+          "step_id": "presetopen"
+        },
+        {
+          "status": "ok",
+          "step_id": "salesdist"
+        },
+        {
+          "error": "no element matches \"[data-rm=\\\"sales\\\"]\"",
+          "status": "error",
+          "step_id": "rm"
+        }
+      ],
+      "list": "steps",
+      "offset": 0,
+      "total": 4
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (page).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 4,
+    "total": 4
+  },
+  "locations": [],
+  "links": [
+    "ev_c8218b4b12148247607e4ed83bcd5a98d9a40ef1291c0e045c90c696d3742a18"
+  ]
+}

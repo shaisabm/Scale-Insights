@@ -1,0 +1,66 @@
+{
+  "id": "ev_b5a927a2d58a18315fcff361d933f622a19920f6ebe431417c439f514a516ba9",
+  "subject": {
+    "kind": "website",
+    "name": "about:blank"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "kind": "part",
+      "name": "events"
+    },
+    "source": {
+      "evidence_id": "ev_2fe25eea401656152221825f357e6f32ebcfad5a48915d0bdbdc5cda9ad53d50",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 1,
+      "next_offset": null,
+      "status": "all-in-view",
+      "total": 1
+    },
+    "from_evidence": "ev_2fe25eea401656152221825f357e6f32ebcfad5a48915d0bdbdc5cda9ad53d50",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "part": "events",
+      "value": {
+        "dropped": 0,
+        "families": [
+          "page_errors"
+        ],
+        "items": [
+          {
+            "kind": "page-error",
+            "message": "ReferenceError: wireDashboard is not defined\n    at http://127.0.0.1:58909/app.js:436:124\n    at http://127.0.0.1:58909/app.js:496:3",
+            "sequence": 1,
+            "step_index": 0
+          }
+        ],
+        "unavailable": []
+      }
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (all-in-view).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [],
+  "links": [
+    "ev_2fe25eea401656152221825f357e6f32ebcfad5a48915d0bdbdc5cda9ad53d50"
+  ]
+}

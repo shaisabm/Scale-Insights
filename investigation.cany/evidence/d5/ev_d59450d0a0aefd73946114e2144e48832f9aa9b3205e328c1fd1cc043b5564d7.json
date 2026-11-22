@@ -1,0 +1,81 @@
+{
+  "id": "ev_d59450d0a0aefd73946114e2144e48832f9aa9b3205e328c1fd1cc043b5564d7",
+  "subject": {
+    "kind": "website",
+    "name": "about:blank"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "fields": [
+        "step_id",
+        "status",
+        "error"
+      ],
+      "kind": "rows",
+      "list": "steps"
+    },
+    "source": {
+      "evidence_id": "ev_f882b187d75b7f3c424a1f01a6f605c3ae03effb88006bf9ad54040f0e764f03",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 5,
+      "next_offset": null,
+      "status": "page",
+      "total": 5
+    },
+    "from_evidence": "ev_f882b187d75b7f3c424a1f01a6f605c3ae03effb88006bf9ad54040f0e764f03",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "items": [
+        {
+          "status": "ok",
+          "step_id": "open"
+        },
+        {
+          "status": "ok",
+          "step_id": "create"
+        },
+        {
+          "status": "ok",
+          "step_id": "bid"
+        },
+        {
+          "status": "ok",
+          "step_id": "place"
+        },
+        {
+          "error": "the browser rejected DOM.focus: Element is not focusable",
+          "status": "error",
+          "step_id": "top0"
+        }
+      ],
+      "list": "steps",
+      "offset": 0,
+      "total": 5
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (page).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 5,
+    "total": 5
+  },
+  "locations": [],
+  "links": [
+    "ev_f882b187d75b7f3c424a1f01a6f605c3ae03effb88006bf9ad54040f0e764f03"
+  ]
+}

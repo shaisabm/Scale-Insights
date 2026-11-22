@@ -1,0 +1,40 @@
+{
+  "revision": 15,
+  "brief": null,
+  "plan": [],
+  "hypotheses": [],
+  "findings": [
+    {
+      "id": "fnd_1",
+      "statement": "web_walkthrough_record connects to the user's Chrome at http://127.0.0.1:9222 and loads https://portal.scaleinsights.com/ signed in (title \"Dashboard\"). The page has a 60px dark (#151c29) icon rail with 9 sections that expands to a 300px drawer with labels and descriptions, a top bar, a date/product filter, 4 period summary cards (accents #4796E0, #32A6A6, #D2B934, #AB60DA), an optimizer recommendations row, a Performance & activity chart and a product table with period tabs.",
+      "evidence_ids": [
+        "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+        "ev_da587659c10f8483f41eb9fe9df9c9c189305a7a1d8eff6f1adb4a2145ee7dea",
+        "ev_56a61b3bfa340351794f8f3a80297c48c34598c3132fae4397a1e159b3dc1c3b"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_2",
+      "statement": "The six requested sections have these sub-pages, recorded from the signed-in portal: Sales (SalesTrend, MonthlyTrend, MovingAverageTrend, DayParting, Orders, CustomerReturns, RefundRate, Tag); Products (/, InventoryValue, ROI, Package, HideShow, COGS, BulkOperations); Restock (5 client-side tabs); Ads (/, Performance, SearchTerms, BestMetrics, CompetingKeywords, NegativeKeywords, MainKeywords, DeadKeywords, AdvertisingTrend, SearchTermTrend, LinkAdsWithAsin); MassCampaigns (/, BulkAuto, FullyManaged, Keyword, Product, DayParting); StrategyExperts (/ plus Post?videoId=N for 9 courses). Each section except Restock, the Mass Campaigns overview and Strategy has a 260px white second-level menu.",
+      "evidence_ids": [
+        "ev_e5a3e7af6cbb1c2d5057d2d687cfae6190279bc7c50a54399dc6ff20e768661a",
+        "ev_fb0bcb400f8ae1720dda65be00b5568ae794038e1acb6ada4d7c39712dd9fc32",
+        "ev_4bb3abd5e67cfc22a08380acb5f26c6a71e76f51b81c6be3579c499ef3f3e88c",
+        "ev_2dda5db13d8fd2fe66277b709e1784df483cf16444fa6176e8e5ec35c180459c"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_3",
+      "statement": "The original Scale Optimizer (React + ag-grid + antd): clicking a Recommendations row (except the Actions cell) or the row's \"Fix once\" opens \"Scale Optimizer details\" (coloured card with stats and More stats, Rule used with See criteria, Suggested action with See calculations, Marketplace/Campaign/Ad group/ASIN, Cancel/Ignore/Fix once). Fix once → \"Resolve recommendation\" confirm → \"Resolved successfully\" with Undo and an auto-resolve offer (Yes automate / Review similar issues / Review solution → \"Automate future cases\"). Ignore asks \"Ignore this keyword?\". Manage: pencil opens \"Edit Scale Optimizer\" (rule type + searchable rule, rule details, 5 card colour schemes, SP/SB/SD ad group signals, Active switch, card preview, Delete optimizer, Name 60 chars); trash asks \"Are you sure?\"; Bulk edit offers Delete/Disable/Activate. History: Restore bid / Unignore with confirmations, Bulk revert with confirmation, date range with presets.",
+      "evidence_ids": [
+        "ev_614485c91ccaca5e54fb7904289c4bb9acc52cb66cdc735c0b5f20db97c65abf",
+        "ev_874cd7905738696687d7ae66cd662e2c9bd1000f5802df899f84967f582b1c42"
+      ],
+      "confidence": "observed"
+    }
+  ],
+  "handoff": "Performance & activity chart (home page) rebuilt from the original's code (bundle ~169690-170300: hD metrics, mB presets, max 5 metrics, preset/custom memory, Days/Weeks/Months enabled by range, rule activity bars, tooltip). Code lives in app/src/app.js (\"Chart (Performance & activity)\" section: METRICS, PRESETS, chart state, drawChart, renderChips, wireChart) with styles in app/src/perf-chart.css. During this work a bad splice deleted the table and wireDashboard code; it was restored from an earlier read and verified (home page loads with no errors, table renders). Preview server now on http://127.0.0.1:63012/ (project_preview). Trap: when splicing, search strings may also occur in the inserted code. rebuild_check stays 68% because capture/ is a blank debugging page.",
+  "updated": "2026-11-22T17:34:59Z"
+}

@@ -1,0 +1,15 @@
+# codebase-memory-mcp: paths left out of the code graph (gitignore syntax)
+
+# Build output — a copy of app/src, would duplicate every symbol
+app/dist/
+node_modules/
+
+# Session logs, captures and binary assets — not source code
+agent-session.jsonl
+build-activity.log
+attachments/
+capture/
+inbox/
+checks/
+investigation.cany/
+.idea/

@@ -1,0 +1,118 @@
+{
+  "id": "ev_fb0e8a1d8af4ec50042a7fde1436e06981c62e4189c1bd59bcbde04aab9e6b22",
+  "subject": {
+    "kind": "website",
+    "name": "http://127.0.0.1:56920/"
+  },
+  "operation": "web_site_capture",
+  "params": {
+    "include_html": false,
+    "max_height": 12000,
+    "noise_pass": false,
+    "visitor_view": false,
+    "widths": [
+      1440,
+      768,
+      390
+    ]
+  },
+  "result": {
+    "counts": {
+      "forms": 0,
+      "headings": 0,
+      "images": 0,
+      "links": 0,
+      "outline": 0
+    },
+    "design": {
+      "backgrounds": [
+        {
+          "count": 1,
+          "value": "#ffffff"
+        }
+      ],
+      "css_variables": {
+        "--body-margin": "8px",
+        "--page-bg": "#ffffff"
+      },
+      "font_faces": [],
+      "font_sizes": [],
+      "font_weights": [],
+      "fonts": [],
+      "max_widths": [],
+      "radii": [],
+      "shadows": [],
+      "spacing": [],
+      "text_colors": []
+    },
+    "files": [
+      "README.md",
+      "capture.json"
+    ],
+    "html_bytes": 0,
+    "output_directory": "/Users/shaisabm/Documents/Craft Anything/127-0-0-1/checks/round-0",
+    "screenshots": [
+      {
+        "css_width": 1440,
+        "cut": false,
+        "file": "screenshot-1440.png",
+        "height": 900,
+        "sha256": "99db2a93b06fa1bf617f5c495e02dcf6c0b76961108491217e2cf4fed8699d35",
+        "width": 1440
+      },
+      {
+        "css_width": 768,
+        "cut": false,
+        "file": "screenshot-768.png",
+        "height": 900,
+        "sha256": "67f28d171be07da65e6b3f743a9659114bf25d9379a49b3cb9f1f11b9e2ffe41",
+        "width": 768
+      },
+      {
+        "css_width": 390,
+        "cut": false,
+        "file": "screenshot-390.png",
+        "height": 900,
+        "sha256": "3041d996afa19b08e53fb21c9dda04644020a7dc610c82f49b04bb1bde862b70",
+        "width": 390
+      }
+    ],
+    "title": "",
+    "url": "http://127.0.0.1:56920/"
+  },
+  "summary": "Captured http://127.0.0.1:56920/: 3 screenshot(s), 0 outline items, 0 headings, 0 images, 0 links, 0 forms → /Users/shaisabm/Documents/Craft Anything/127-0-0-1/checks/round-0.",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "cdp",
+    "engine_version": "1.3",
+    "host": "macos-aarch64"
+  },
+  "limitations": [
+    {
+      "code": "one_state",
+      "message": "One state of the page: menus, dialogs and content behind interactions are not opened."
+    },
+    {
+      "code": "cross_origin_css",
+      "message": "CSS custom properties and breakpoints from cross-origin stylesheets can't be read."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 3,
+    "total": 3
+  },
+  "locations": [
+    {
+      "kind": "url",
+      "value": "http://127.0.0.1:56920/"
+    },
+    {
+      "kind": "path",
+      "value": "/Users/shaisabm/Documents/Craft Anything/127-0-0-1/checks/round-0"
+    }
+  ],
+  "links": []
+}

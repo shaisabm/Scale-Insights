@@ -1,0 +1,123 @@
+{
+  "id": "ev_946de84fdf82520d772fc8b2df2871724a35da89a2ccada603130acdc0ffaab7",
+  "subject": {
+    "kind": "website",
+    "name": "https://portal.scaleinsights.com/StrategyExperts"
+  },
+  "operation": "core_evidence_browse",
+  "params": {
+    "show": {
+      "fields": [
+        "step_id",
+        "status",
+        "url",
+        "artifacts.history"
+      ],
+      "kind": "rows",
+      "limit": 1,
+      "list": "steps"
+    },
+    "source": {
+      "evidence_id": "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+      "kind": "saved"
+    }
+  },
+  "result": {
+    "coverage": {
+      "at_end": true,
+      "examined": 1,
+      "next_offset": null,
+      "status": "page",
+      "total": 1
+    },
+    "from_evidence": "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42",
+    "from_tool": "web_walkthrough_record",
+    "shown": {
+      "items": [
+        {
+          "artifacts.history": {
+            "current_index": 16,
+            "entries": [
+              {
+                "url": "chrome://new-tab-page/"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Identity/Account/Login"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Index"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/index"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Sales/SalesTrend"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Products"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Products/InventoryValue"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Products/ROI"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Products/"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Restock"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/KeywordRanking"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/Ads/Insights"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/MassCampaigns"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/StrategyExperts"
+              },
+              {
+                "url": "https://portal.scaleinsights.com/"
+              }
+            ]
+          },
+          "status": "ok",
+          "step_id": "open-dashboard",
+          "url": "https://portal.scaleinsights.com/"
+        }
+      ],
+      "list": "steps",
+      "offset": 0,
+      "total": 1
+    }
+  },
+  "summary": "Part of web_walkthrough_record evidence (page).",
+  "confidence": "observed",
+  "authority": "our-run",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "macos-aarch64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [],
+  "links": [
+    "ev_e1dc5bb86f85f0f015ccf9bf17be4a551b7629ce21371307f1e1c98c4cd21f42"
+  ]
+}
