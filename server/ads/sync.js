@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
 import { refreshProducts } from "./products.js";
@@ -51,102 +52,129 @@ export const REPORTS = {
 export const SEARCH_PRODUCTS = ["SP_SEARCH", "SB_SEARCH"];
 
 const SB_ADS = "application/vnd.sbadresource.v4+json";
+const LEASE_MS = 2 * 60_000; // How long a sync may go without saving a page before another may take over.
 
 /**
  * Lists Sponsored Brands ads, without changing any, to record which ASINs each ad group advertised
  * on which dates (ads_search_product_history). Each page is saved as it arrives, so a list still
  * going at `deadline` stops (returning false) and the next call carries on from there. Returns
- * true once the whole list has been read and the history updated.
+ * true once the whole list has been read and the history updated, and false when it stopped
+ * before that, or another sync is listing the profile's ads.
  */
 export async function refreshSbProducts(db, ads, profileId, { timeZone = "America/Los_Angeles", now = Date.now, deadline = Infinity } = {}) {
-  const saved = (await db.execute({ sql: "SELECT next_token, scan_started_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] })).rows[0];
-  // A list under way has scan_started_at. With a next_token it carries on from that page; without
-  // one every page was read and saved, and only recording them is left.
-  let nextToken = saved?.next_token || null;
-  const startedAt = saved?.scan_started_at || new Date(now()).toISOString();
-  if (!saved?.scan_started_at) await db.execute({ sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] });
-  if (!saved?.scan_started_at || nextToken) do {
-    const left = deadline - now();
-    if (left <= 0) return false;
-    // A page still loading at the deadline is dropped; the next call asks for it again.
-    const signal = Number.isFinite(left) ? AbortSignal.timeout(Math.ceil(left)) : undefined;
-    let res;
-    try {
-      res = await ads.request("POST", "/sb/v4/ads/list", {
-        profileId,
-        // Archived ads too: archiving one changes what its ad group advertises.
-        body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) },
-        contentType: SB_ADS,
-        accept: SB_ADS,
-        signal,
-      });
-    } catch (err) {
-      if (signal?.aborted) return false;
-      throw err;
-    }
-    const { status, data } = res;
-    if (status !== 200) {
-      // Only the token changes between pages, so HTTP 400 means Amazon refused it (it expired, say)
-      // and the next call starts the list over. Other failures keep it, to carry on from.
-      if (status === 400 && nextToken) await db.execute({ sql: "UPDATE ads_product_map_status SET next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] });
-      throw new Error(`Sponsored Brands ad list failed: HTTP ${status}`);
-    }
-    nextToken = data.nextToken || null;
-    await db.batch([
-      ...(data.ads || []).map(ad => ({
-        sql: "INSERT OR REPLACE INTO ads_sb_ads_scan (profile_id, ad_id, campaign_id, ad_group_id, state, asins, created_ms, updated_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        args: [profileId, String(ad.adId), String(ad.campaignId), String(ad.adGroupId), String(ad.state || ""), (ad.creative?.asins || []).map(String).join(","), ad.extendedData?.creationDate ?? null, ad.extendedData?.lastUpdateDate ?? null],
-      })),
-      { sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, next_token, scan_started_at) VALUES (?, 'SB_SEARCH', ?, ?) ON CONFLICT (profile_id, ad_product) DO UPDATE SET next_token = excluded.next_token, scan_started_at = excluded.scan_started_at", args: [profileId, nextToken, startedAt] },
-    ], "write");
-  } while (nextToken);
-
-  const startedMs = Date.parse(startedAt), dayOf = ms => todayIn(timeZone, ms);
-  // Ads can still change later on the day the list began, so it confirms them through the day before.
-  const through = addDays(dayOf(startedMs), -1);
-  const [listed, known] = await db.batch([
-    { sql: "SELECT * FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] },
-    { sql: "SELECT * FROM ads_search_product_history WHERE profile_id = ? AND ad_product = 'SB_SEARCH' ORDER BY valid_to", args: [profileId] },
-  ], "read");
-  const latest = new Map(known.rows.map(r => [`${r.campaign_id}|${r.ad_group_id}`, r]));
-  const groups = new Map();
-  for (const ad of listed.rows) {
-    const key = `${ad.campaign_id}|${ad.ad_group_id}`;
-    const g = groups.get(key) || { campaignId: ad.campaign_id, adGroupId: ad.ad_group_id, asins: new Set(), changed: 0, created: Infinity };
-    // Only enabled ads serve, but any ad's change can change what the group advertises. An ad
-    // without dates counts as changed when the list began, and an enabled one listing no ASINs
-    // leaves the group's products unknown.
-    if (ad.state === "ENABLED") {
-      const asins = String(ad.asins).split(",").filter(Boolean);
-      if (!asins.length) g.unknown = true;
-      for (const asin of asins) g.asins.add(asin);
-    }
-    g.changed = Math.max(g.changed, Number(ad.updated_ms) || startedMs);
-    g.created = Math.min(g.created, Number(ad.created_ms) || startedMs);
-    groups.set(key, g);
-  }
-  const stmts = [];
-  for (const [key, g] of groups) {
-    if (g.unknown || !g.asins.size) continue;
-    const asins = [...g.asins].sort().join(","), prev = latest.get(key);
-    if (prev && prev.asins === asins && g.changed < Date.parse(prev.observed_at)) {
-      // Unchanged since the list that last confirmed it.
-      stmts.push({ sql: "UPDATE ads_search_product_history SET valid_to = ?, observed_at = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND campaign_id = ? AND ad_group_id = ? AND valid_from = ?", args: [through, startedAt, profileId, g.campaignId, g.adGroupId, prev.valid_from] });
-      continue;
-    }
-    // The day of a change may mix products, unless it's the day the group's ads were all made.
-    const changedOn = dayOf(g.changed);
-    let start = changedOn === dayOf(g.created) ? changedOn : addDays(changedOn, 1);
-    if (prev && start <= prev.valid_to) start = addDays(prev.valid_to, 1);
-    if (start > through) continue;
-    stmts.push({ sql: "INSERT OR REPLACE INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) VALUES (?, 'SB_SEARCH', ?, ?, ?, ?, ?, ?)", args: [profileId, g.campaignId, g.adGroupId, asins, start, through, startedAt] });
-  }
-  await db.batch([
-    ...stmts,
-    { sql: "UPDATE ads_product_map_status SET ready_at = ?, ready_through = ?, error = NULL, next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [new Date(now()).toISOString(), through, profileId] },
-    { sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] },
+  // One list per profile at a time. A call takes the lease, renews it with each write and gives it
+  // up when it stops. Every write checks the lease in the same batch, so a call that lost it (it
+  // stalled past lease_until, say, and another took over) changes nothing, and two syncs can't mix
+  // their pages.
+  const owner = randomUUID();
+  const owns = "EXISTS (SELECT 1 FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?)";
+  const renew = () => ({ sql: "UPDATE ads_product_map_status SET lease_until = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [now() + LEASE_MS, profileId, owner] });
+  const [, claim, status] = await db.batch([
+    { sql: "INSERT INTO ads_product_map_status (profile_id, ad_product) VALUES (?, 'SB_SEARCH') ON CONFLICT (profile_id, ad_product) DO NOTHING", args: [profileId] },
+    { sql: "UPDATE ads_product_map_status SET lease_owner = ?, lease_until = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND (lease_owner IS NULL OR lease_until <= ?)", args: [owner, now() + LEASE_MS, profileId, now()] },
+    { sql: "SELECT next_token, scan_started_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
   ], "write");
-  return true;
+  if (!claim.rowsAffected) return false;
+  try {
+    return await listAndRecord(status.rows[0]);
+  } finally {
+    // If giving the lease up fails, it runs out at lease_until instead.
+    await db.execute({ sql: "UPDATE ads_product_map_status SET lease_owner = NULL, lease_until = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [profileId, owner] }).catch(() => {});
+  }
+
+  async function listAndRecord(saved) {
+    // A list under way has scan_started_at. With a next_token it carries on from that page; without
+    // one every page was read and saved, and only recording them is left.
+    let nextToken = saved?.next_token || null;
+    const startedAt = saved?.scan_started_at || new Date(now()).toISOString();
+    if (!saved?.scan_started_at) await db.execute({ sql: `DELETE FROM ads_sb_ads_scan WHERE profile_id = ? AND ${owns}`, args: [profileId, profileId, owner] });
+    if (!saved?.scan_started_at || nextToken) do {
+      const left = deadline - now();
+      if (left <= 0) return false;
+      // A page still loading at the deadline is dropped; the next call asks for it again.
+      const signal = Number.isFinite(left) ? AbortSignal.timeout(Math.ceil(left)) : undefined;
+      let res;
+      try {
+        res = await ads.request("POST", "/sb/v4/ads/list", {
+          profileId,
+          // Archived ads too: archiving one changes what its ad group advertises.
+          body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) },
+          contentType: SB_ADS,
+          accept: SB_ADS,
+          signal,
+        });
+      } catch (err) {
+        if (signal?.aborted) return false;
+        throw err;
+      }
+      const { status, data } = res;
+      if (status !== 200) {
+        // Only the token changes between pages, so HTTP 400 means Amazon refused it (it expired, say)
+        // and the next call starts the list over. Other failures keep it, to carry on from.
+        if (status === 400 && nextToken) await db.execute({ sql: "UPDATE ads_product_map_status SET next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [profileId, owner] });
+        throw new Error(`Sponsored Brands ad list failed: HTTP ${status}`);
+      }
+      nextToken = data.nextToken || null;
+      const [kept] = await db.batch([
+        renew(),
+        ...(data.ads || []).map(ad => ({
+          sql: `INSERT OR REPLACE INTO ads_sb_ads_scan (profile_id, ad_id, campaign_id, ad_group_id, state, asins, created_ms, updated_ms) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${owns}`,
+          args: [profileId, String(ad.adId), String(ad.campaignId), String(ad.adGroupId), String(ad.state || ""), (ad.creative?.asins || []).map(String).join(","), ad.extendedData?.creationDate ?? null, ad.extendedData?.lastUpdateDate ?? null, profileId, owner],
+        })),
+        { sql: "UPDATE ads_product_map_status SET next_token = ?, scan_started_at = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [nextToken, startedAt, profileId, owner] },
+      ], "write");
+      if (!kept.rowsAffected) return false;
+    } while (nextToken);
+
+    const startedMs = Date.parse(startedAt), dayOf = ms => todayIn(timeZone, ms);
+    // Ads can still change later on the day the list began, so it confirms them through the day before.
+    const through = addDays(dayOf(startedMs), -1);
+    const [listed, known] = await db.batch([
+      { sql: "SELECT * FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] },
+      { sql: "SELECT * FROM ads_search_product_history WHERE profile_id = ? AND ad_product = 'SB_SEARCH' ORDER BY valid_to", args: [profileId] },
+    ], "read");
+    const latest = new Map(known.rows.map(r => [`${r.campaign_id}|${r.ad_group_id}`, r]));
+    const groups = new Map();
+    for (const ad of listed.rows) {
+      const key = `${ad.campaign_id}|${ad.ad_group_id}`;
+      const g = groups.get(key) || { campaignId: ad.campaign_id, adGroupId: ad.ad_group_id, asins: new Set(), changed: 0, created: Infinity };
+      // Only enabled ads serve, but any ad's change can change what the group advertises. An ad
+      // without dates counts as changed when the list began, and an enabled one listing no ASINs
+      // leaves the group's products unknown.
+      if (ad.state === "ENABLED") {
+        const asins = String(ad.asins).split(",").filter(Boolean);
+        if (!asins.length) g.unknown = true;
+        for (const asin of asins) g.asins.add(asin);
+      }
+      g.changed = Math.max(g.changed, Number(ad.updated_ms) || startedMs);
+      g.created = Math.min(g.created, Number(ad.created_ms) || startedMs);
+      groups.set(key, g);
+    }
+    const stmts = [];
+    for (const [key, g] of groups) {
+      if (g.unknown || !g.asins.size) continue;
+      const asins = [...g.asins].sort().join(","), prev = latest.get(key);
+      if (prev && prev.asins === asins && g.changed < Date.parse(prev.observed_at)) {
+        // Unchanged since the list that last confirmed it.
+        stmts.push({ sql: `UPDATE ads_search_product_history SET valid_to = ?, observed_at = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND campaign_id = ? AND ad_group_id = ? AND valid_from = ? AND ${owns}`, args: [through, startedAt, profileId, g.campaignId, g.adGroupId, prev.valid_from, profileId, owner] });
+        continue;
+      }
+      // The day of a change may mix products, unless it's the day the group's ads were all made.
+      const changedOn = dayOf(g.changed);
+      let start = changedOn === dayOf(g.created) ? changedOn : addDays(changedOn, 1);
+      if (prev && start <= prev.valid_to) start = addDays(prev.valid_to, 1);
+      if (start > through) continue;
+      stmts.push({ sql: `INSERT OR REPLACE INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) SELECT ?, 'SB_SEARCH', ?, ?, ?, ?, ?, ? WHERE ${owns}`, args: [profileId, g.campaignId, g.adGroupId, asins, start, through, startedAt, profileId, owner] });
+    }
+    // The status update comes last: it gives up the lease, which the statements before it check.
+    const [kept] = await db.batch([
+      renew(),
+      ...stmts,
+      { sql: `DELETE FROM ads_sb_ads_scan WHERE profile_id = ? AND ${owns}`, args: [profileId, profileId, owner] },
+      { sql: "UPDATE ads_product_map_status SET ready_at = ?, ready_through = ?, error = NULL, next_token = NULL, scan_started_at = NULL, lease_owner = NULL, lease_until = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [new Date(now()).toISOString(), through, profileId, owner] },
+    ], "write");
+    return kept.rowsAffected > 0;
+  }
 }
 
 const FRESH_DAYS = 14; // Attribution can still change numbers this recent, so refresh them daily.

@@ -405,6 +405,38 @@ describe("search term reports", () => {
     expect(rows.map(r => [r.asins, r.valid_from, r.valid_to])).toEqual([["B0PRODUCTA", "2026-09-01", "2026-11-21"]]);
   });
 
+  it("lets only one sync list a profile's Sponsored Brands ads at a time", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const now = () => at("2026-11-22");
+    let calls = 0;
+    const ads = { request: async (method, path, { body }) => {
+      calls++;
+      await new Promise(resolve => setTimeout(resolve, 5)); // the other sync runs meanwhile
+      const page = Number(body.nextToken || 0);
+      return { status: 200, data: { ads: [sbAd(`g${page}`, ["B0PRODUCTA"])], ...(page < 2 ? { nextToken: String(page + 1) } : {}) } };
+    } };
+    const results = await Promise.all([refreshSbProducts(db, ads, profileId, { now }), refreshSbProducts(db, ads, profileId, { now })]);
+    expect(results.sort()).toEqual([false, true]);
+    expect(calls).toBe(3);
+    expect(Number((await db.execute("SELECT COUNT(*) AS n FROM ads_search_product_history")).rows[0].n)).toBe(3);
+    // The lease is given up afterwards, so the next sync can list again.
+    expect(await refreshSbProducts(db, ads, profileId, { now })).toBe(true);
+  });
+
+  it("stops without writing once another sync has taken over its lease", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ads = { request: async (method, path, { body }) => {
+      const page = Number(body.nextToken || 0);
+      // While the second page loads, the lease passes to another sync, as if this one had stalled past it.
+      if (page === 1) await db.execute("UPDATE ads_product_map_status SET lease_owner = 'other', lease_until = 0");
+      return { status: 200, data: { ads: [sbAd(`g${page}`, ["B0PRODUCTA"])], ...(page < 1 ? { nextToken: "1" } : {}) } };
+    } };
+    expect(await refreshSbProducts(db, ads, profileId, { now: () => at("2026-11-22") })).toBe(false);
+    expect((await db.execute("SELECT ad_group_id FROM ads_sb_ads_scan")).rows.map(r => r.ad_group_id)).toEqual(["g0"]);
+    expect((await db.execute("SELECT COUNT(*) AS n FROM ads_search_product_history")).rows[0].n).toBe(0);
+    expect((await db.execute("SELECT ready_through, lease_owner FROM ads_product_map_status")).rows.map(r => [r.ready_through, r.lease_owner])).toEqual([[null, "other"]]);
+  });
+
   it("drops a product map built before it had dates, so the next sync rebuilds it", async () => {
     const db = createClient({ url: ":memory:" });
     await db.batch([

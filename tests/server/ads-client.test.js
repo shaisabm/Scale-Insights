@@ -109,6 +109,22 @@ describe("createAdsClient", () => {
     await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.timeout(20) })).rejects.toThrow(/abort/i);
   });
 
+  it("stops waiting for a slow token when the caller's signal aborts, without cancelling the shared refresh", async () => {
+    const fetch = vi.fn(async url => {
+      if (String(url).endsWith("/auth/o2/token")) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return Response.json({});
+    });
+    const ads = createAdsClient(cfg, { fetch });
+    const started = Date.now();
+    await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.timeout(20) })).rejects.toThrow(/abort/i);
+    expect(Date.now() - started).toBeLessThan(150);
+    expect(fetch.mock.calls[0][1].signal).toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("writes to the test account with the test login's token", async () => {
     const fetch = fakeFetch(() => Response.json({ campaigns: { success: [] } }, { status: 207 }));
     const ads = createAdsClient(cfg, { fetch });

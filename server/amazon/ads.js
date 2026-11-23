@@ -24,18 +24,30 @@ export function assertAllowed({ method, path, profileId, testProfileId, producti
   throw new Error(`Blocked ${method} ${path}: outside production, Amazon Ads writes may only go to the test account.`);
 }
 
+/** Waits for `promise` unless `signal` aborts first. The work itself carries on for anyone else waiting on it. */
+function untilAborted(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
 /** Amazon Ads API client. Every request passes the write guard first. */
 export function createAdsClient(cfg, { fetch = globalThis.fetch } = {}) {
-  // `signal` lets the caller stop the request, reading its answer included.
+  // `signal` lets the caller stop the request: waiting for a token, the call and reading its answer.
   async function request(method, path, { profileId, body, contentType = "application/json", accept, humanApproved = false, signal } = {}) {
     assertAllowed({ method, path, profileId, testProfileId: cfg.testProfileId, production: cfg.production, humanApproved });
     const url = new URL(cfg.host + path);
     if (url.protocol !== "https:") throw new Error(`Refusing to send Amazon Ads credentials to ${url.origin}: the Ads API host must use https.`);
     const onTestAccount = Boolean(cfg.testProfileId) && String(profileId) === String(cfg.testProfileId);
-    const token = await getAccessToken(
+    // The token refresh is shared by concurrent requests, so the signal only stops this one waiting for it.
+    const token = await untilAborted(getAccessToken(
       { clientId: cfg.clientId, clientSecret: cfg.clientSecret, refreshToken: onTestAccount ? cfg.testRefreshToken : cfg.refreshToken },
       { fetch },
-    );
+    ), signal);
     const headers = { Authorization: `Bearer ${token}`, "Amazon-Advertising-API-ClientId": cfg.clientId, Accept: accept || contentType };
     if (profileId) headers["Amazon-Advertising-API-Scope"] = String(profileId);
     if (body !== undefined) headers["Content-Type"] = contentType;

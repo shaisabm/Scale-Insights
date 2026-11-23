@@ -81,7 +81,8 @@ const SCHEMA = [
   // When that history last finished updating (ready_at) and the last date it confirms
   // (ready_through), why the latest refresh failed, if it did, and where an unfinished ads list
   // carries on (next_token, from the list begun at scan_started_at). Search reports for the ad type
-  // can't count as complete for dates after ready_through.
+  // can't count as complete for dates after ready_through. lease_owner is the sync listing the ads
+  // now, until lease_until (epoch ms), so two syncs never list at once.
   `CREATE TABLE IF NOT EXISTS ads_product_map_status (
     profile_id TEXT NOT NULL,
     ad_product TEXT NOT NULL,
@@ -90,6 +91,8 @@ const SCHEMA = [
     error TEXT,
     next_token TEXT,
     scan_started_at TEXT,
+    lease_owner TEXT,
+    lease_until INTEGER,
     PRIMARY KEY (profile_id, ad_product)
   )`,
   // Which days have been stored, and when, so recent days can be refreshed.
@@ -167,6 +170,12 @@ export async function migrate(db) {
         ]);
       }
       if (!status.includes("ready_through")) await tx.execute("ALTER TABLE ads_product_map_status ADD COLUMN ready_through TEXT");
+      if (!status.includes("lease_owner")) {
+        await tx.batch([
+          "ALTER TABLE ads_product_map_status ADD COLUMN lease_owner TEXT",
+          "ALTER TABLE ads_product_map_status ADD COLUMN lease_until INTEGER",
+        ]);
+      }
       await tx.commit();
     } finally {
       tx.close();
