@@ -33,6 +33,13 @@ describe("SP.adTotals", () => {
     });
   });
 
+  it("adds up every ad type for ALL", () => {
+    stubFetch({});
+    const SP = openApp("/");
+    const days = [day("SP", "2026-11-01"), day("SB", "2026-11-01", 2), day("SD", "2026-11-02", 3), day("SP", "2026-11-03", 9)];
+    expect(SP.adTotals(days, "ALL", "2026-11-01", "2026-11-02")).toMatchObject({ ppcSales: 240, ppcCost: 60, impressions: 6000, clicks: 120, acos: 25 });
+  });
+
   it("returns zeros, not NaN, when there is no data", () => {
     stubFetch({});
     const SP = openApp("/");
@@ -42,15 +49,28 @@ describe("SP.adTotals", () => {
 });
 
 describe("Advertising trend page", () => {
-  it("draws Sponsored Products and Sponsored Brands from the API data", async () => {
+  it("draws all campaign types first, then each ad type, from the API data", async () => {
     await openTrend(SP => [...lastDays(SP, 56).map(d => day("SP", d)), day("SB", SP.iso(SP.lastDate), 2)]);
-    const [sp, sb] = document.querySelectorAll("table.trend");
-    expect([...document.querySelectorAll("#adt h4")].map(h => h.textContent)).toEqual(["Advertising trend for Sponsored Products", "Advertising trend for Sponsored Brands"]);
+    const [all, sp, sb] = document.querySelectorAll("table.trend");
+    expect([...document.querySelectorAll("#adt h4")].map(h => h.textContent)).toEqual([
+      "Advertising trend for all campaign types",
+      "Advertising trend for Sponsored Products",
+      "Advertising trend for Sponsored Brands",
+    ]);
     // Summary, then 8 weekly columns of 7 days each.
     expect(rowValues(sp, "ppcSales")).toEqual(["$2,240.00", ...Array(8).fill("$280.00")]);
     expect(rowValues(sp, "acos")).toEqual(Array(9).fill("25.00%"));
     expect(rowValues(sb, "ppcSales")).toEqual(["$80.00", ...Array(7).fill("$0.00"), "$80.00"]);
+    expect(rowValues(all, "ppcSales")).toEqual(["$2,320.00", ...Array(7).fill("$280.00"), "$360.00"]);
+    expect(rowValues(all, "ppcCost")).toEqual(["$580.00", ...Array(7).fill("$70.00"), "$90.00"]);
     expect(document.querySelector(".meta").textContent).toContain("last synced");
+  });
+
+  it("adds a Sponsored Display table only when there is Sponsored Display data", async () => {
+    await openTrend(SP => [day("SP", SP.iso(SP.lastDate)), day("SD", SP.iso(SP.lastDate), 3)]);
+    const headings = [...document.querySelectorAll("#adt h4")].map(h => h.textContent);
+    expect(headings).toEqual(["Advertising trend for all campaign types", "Advertising trend for Sponsored Products", "Advertising trend for Sponsored Display"]);
+    expect(rowValues(document.querySelector("table.trend"), "impressions")[0]).toBe("4,000");
   });
 
   it("leaves out profit rows, which need product costs", async () => {

@@ -239,12 +239,13 @@
   // /api/ads/trend, summed into columns here. Profit needs product costs, which aren't
   // connected yet, so those rows are left out.
   const LIVE_METRICS = [["PPC Sales", "ppcSales", money, null], ["PPC Cost", "ppcCost", money, null], ["ACOS", "acos", v => pct(v), "down"], ["Orders", "ppcOrders", int, null], ["Units", "ppcUnits", int, null], ["Conversion", "ppcConversion", v => pct(v), "up"], ["CPC", "cpc", money, "down"], ["Impressions", "impressions", int, null], ["Clicks", "clicks", int, null], ["CTR", "ctr", v => pct(v), null], ["Cost Per Order", "costPerOrder", money, null], ["Avg Sales Price", "asp", money, null]];
-  const AD_PRODUCTS = [["SP", "Sponsored Products"], ["SB", "Sponsored Brands"]];
-  // Totals for one ad product between two "YYYY-MM-DD" dates, with the ratios worked out from them.
+  const AD_PRODUCTS = [["SP", "Sponsored Products"], ["SB", "Sponsored Brands"], ["SD", "Sponsored Display"]];
+  // Totals for one ad product ("ALL" adds up every ad type, like the Ads console's Performance
+  // chart) between two "YYYY-MM-DD" dates, with the ratios worked out from them.
   SP.adTotals = (days, adProduct, from, to) => {
     const t = { ppcSales: 0, ppcCost: 0, ppcOrders: 0, ppcUnits: 0, impressions: 0, clicks: 0 };
     for (const d of days) {
-      if (d.adProduct !== adProduct || d.date < from || d.date > to) continue;
+      if ((adProduct !== "ALL" && d.adProduct !== adProduct) || d.date < from || d.date > to) continue;
       t.ppcSales += d.sales; t.ppcCost += d.cost; t.ppcOrders += d.orders; t.ppcUnits += d.units; t.impressions += d.impressions; t.clicks += d.clicks;
     }
     const ratio = (a, b, k = 1) => (b ? (a / b) * k : 0);
@@ -288,8 +289,10 @@
       const st = { cols: 8, days: 7, last: SP.lastDate };
       let days = data.days;
       const draw = () => {
+        // All campaign types first, then each ad type the account has data for.
+        const tables = [["ALL", "all campaign types"], ...AD_PRODUCTS.filter(([k]) => days.some(d => d.adProduct === k))];
         $("#adt", root).innerHTML = days.length
-          ? AD_PRODUCTS.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${liveTrend(st, days, k)}`).join("")
+          ? tables.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${liveTrend(st, days, k)}`).join("")
           : `<p class="lead">No Amazon Ads data yet. It syncs every morning, or use Sync now.</p>`;
         SP.paintHeat(root);
       };

@@ -1,7 +1,8 @@
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
 
-// Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands per campaign.
+// Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands and Sponsored
+// Display per campaign (14-day). These match the Amazon Ads console's columns for each ad type.
 // `historyDays` is how far back Amazon keeps each report type.
 export const REPORTS = {
   SP: {
@@ -16,6 +17,14 @@ export const REPORTS = {
     historyDays: 60,
     adProduct: "SPONSORED_BRANDS",
     reportTypeId: "sbCampaigns",
+    groupBy: ["campaign"],
+    columns: ["date", "campaignId", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
+    row: r => ({ campaignId: r.campaignId, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
+  },
+  SD: {
+    historyDays: 60,
+    adProduct: "SPONSORED_DISPLAY",
+    reportTypeId: "sdCampaigns",
     groupBy: ["campaign"],
     columns: ["date", "campaignId", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
     row: r => ({ campaignId: r.campaignId, orders: r.purchases, units: r.unitsSold, sales: r.sales }),

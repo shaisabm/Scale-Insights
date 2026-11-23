@@ -34,7 +34,7 @@ describe.each(["preview", "development"])("in %s", env => {
     const assign = stubNavigation();
     openApp("/Ads/AdvertisingTrend", { env });
     expect(dataSwitch().checked).toBe(false);
-    await vi.waitFor(() => expect(document.querySelectorAll("table.trend")).toHaveLength(2));
+    await vi.waitFor(() => expect(document.querySelectorAll("table.trend")).toHaveLength(3));
     expect(fetch).not.toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
     expect(document.querySelector('tr[data-metric="ppcSales"] td').textContent).not.toBe("$0.00");

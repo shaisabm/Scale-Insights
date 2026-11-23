@@ -85,12 +85,19 @@ describe("reportSpec and normalizeRows", () => {
     const spec = reportSpec("SP", { start: "2026-11-01", end: "2026-11-21" });
     expect(spec).toMatchObject({ startDate: "2026-11-01", endDate: "2026-11-21", configuration: { adProduct: "SPONSORED_PRODUCTS", reportTypeId: "spAdvertisedProduct", timeUnit: "DAILY", format: "GZIP_JSON" } });
     expect(reportSpec("SB", { start: "2026-11-01", end: "2026-11-02" }).configuration.reportTypeId).toBe("sbCampaigns");
+    expect(reportSpec("SD", { start: "2026-11-01", end: "2026-11-02" }).configuration).toMatchObject({ adProduct: "SPONSORED_DISPLAY", reportTypeId: "sdCampaigns", groupBy: ["campaign"] });
   });
 
   it("maps Sponsored Products columns and sums duplicate keys", () => {
     const raw = { date: "2026-11-01", campaignId: 1, adGroupId: 2, advertisedAsin: "B0A", impressions: "10", clicks: 2, cost: 1.25, purchases7d: 1, unitsSoldClicks7d: 3, sales7d: 30 };
     expect(normalizeRows("SP", [raw, raw])).toEqual([
       { date: "2026-11-01", campaignId: "1", adGroupId: "2", asin: "B0A", impressions: 20, clicks: 4, cost: 2.5, orders: 2, units: 6, sales: 60 },
+    ]);
+  });
+
+  it("maps Sponsored Display columns like Sponsored Brands", () => {
+    expect(normalizeRows("SD", [{ date: "2026-11-01", campaignId: 9, impressions: 40, clicks: 3, cost: 1.2, purchases: 2, unitsSold: 2, sales: 30 }])).toEqual([
+      { date: "2026-11-01", campaignId: "9", adGroupId: "", asin: "", impressions: 40, clicks: 3, cost: 1.2, orders: 2, units: 2, sales: 30 },
     ]);
   });
 
@@ -114,15 +121,15 @@ describe("storeWindow", () => {
 });
 
 describe("syncAds", () => {
-  it("requests 90 days of Sponsored Products and 60 of Sponsored Brands, and stores them once Amazon finishes", async () => {
+  it("requests 90 days of Sponsored Products and 60 of Sponsored Brands and Display, and stores them once Amazon finishes", async () => {
     const db = createClient({ url: ":memory:" });
     const ads = fakeAds();
     const c = clock();
     const summary = await syncAds({ db, ads, profileId: PROFILE, now: c.now, sleep: c.sleep });
-    expect(summary).toEqual({ requested: 5, stored: 5, failed: 0, pending: 0, rows: 150, errors: [] });
-    expect(ads.created.map(s => s.configuration.reportTypeId)).toEqual(["spAdvertisedProduct", "spAdvertisedProduct", "spAdvertisedProduct", "sbCampaigns", "sbCampaigns"]);
+    expect(summary).toEqual({ requested: 7, stored: 7, failed: 0, pending: 0, rows: 210, errors: [] });
+    expect(ads.created.map(s => s.configuration.reportTypeId)).toEqual(["spAdvertisedProduct", "spAdvertisedProduct", "spAdvertisedProduct", "sbCampaigns", "sbCampaigns", "sdCampaigns", "sdCampaigns"]);
     expect(await count(db, "SELECT COUNT(*) AS n FROM ads_daily WHERE ad_product = 'SP'")).toBe(90);
-    expect(await count(db, "SELECT COUNT(*) AS n FROM ads_synced_days")).toBe(150);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM ads_synced_days")).toBe(210);
     expect(await count(db, "SELECT COUNT(*) AS n FROM ads_daily WHERE date > ?", [LAST])).toBe(0);
   });
 
@@ -152,7 +159,7 @@ describe("syncAds", () => {
     };
     const c = clock();
     const summary = await syncAds({ db, ads, profileId: PROFILE, now: c.now, sleep: c.sleep });
-    expect(summary).toEqual({ requested: 3, stored: 3, failed: 0, pending: 0, rows: 90, errors: ["SB: Report request failed: HTTP 401 not authorized for Sponsored Brands"] });
+    expect(summary).toEqual({ requested: 5, stored: 5, failed: 0, pending: 0, rows: 150, errors: ["SB: Report request failed: HTTP 401 not authorized for Sponsored Brands"] });
   });
 
   it("requests nothing new on a run soon after", async () => {
@@ -169,17 +176,17 @@ describe("syncAds", () => {
     const db = createClient({ url: ":memory:" });
     const c = clock();
     const slow = fakeAds({ status: "PROCESSING" });
-    expect(await syncAds({ db, ads: slow, profileId: PROFILE, now: c.now, sleep: c.sleep, budgetMs: 30_000 })).toEqual({ requested: 5, stored: 0, failed: 0, pending: 5, rows: 0, errors: [] });
+    expect(await syncAds({ db, ads: slow, profileId: PROFILE, now: c.now, sleep: c.sleep, budgetMs: 30_000 })).toEqual({ requested: 7, stored: 0, failed: 0, pending: 7, rows: 0, errors: [] });
     slow.getReport = async (profileId, id) => ({ status: "COMPLETED", url: `https://s3.test/${id}` });
     c.advance(HOUR);
-    expect(await syncAds({ db, ads: slow, profileId: PROFILE, now: c.now, sleep: c.sleep })).toEqual({ requested: 0, stored: 5, failed: 0, pending: 0, rows: 150, errors: [] });
+    expect(await syncAds({ db, ads: slow, profileId: PROFILE, now: c.now, sleep: c.sleep })).toEqual({ requested: 0, stored: 7, failed: 0, pending: 0, rows: 210, errors: [] });
   });
 
   it("marks failed reports and asks for those days again next time", async () => {
     const db = createClient({ url: ":memory:" });
     const c = clock();
     const failing = fakeAds({ status: id => (id === "report-1" ? "FAILED" : "COMPLETED") });
-    expect(await syncAds({ db, ads: failing, profileId: PROFILE, now: c.now, sleep: c.sleep })).toMatchObject({ requested: 5, stored: 4, failed: 1 });
+    expect(await syncAds({ db, ads: failing, profileId: PROFILE, now: c.now, sleep: c.sleep })).toMatchObject({ requested: 7, stored: 6, failed: 1 });
     const { rows } = await db.execute("SELECT error FROM ads_report_requests WHERE report_id = 'report-1'");
     expect(rows[0].error).toBe("Amazon said no");
     c.advance(HOUR);
