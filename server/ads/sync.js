@@ -172,7 +172,7 @@ export async function storeWindow(db, { profileId, product, start, end, rows, sy
  * One sync run: store reports requested earlier, request missing or stale windows, then wait
  * for them while `budgetMs` allows. Unfinished reports are picked up by the next run.
  */
-export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Angeles", products = ["SP", "SB", "SD", ...SEARCH_PRODUCTS], budgetMs = 45_000, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
+export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Angeles", products = ["SP", "SB", "SD"], budgetMs = 45_000, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
   await migrate(db);
   const started = now();
   const iso = () => new Date(now()).toISOString();

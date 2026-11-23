@@ -1,6 +1,6 @@
 import { createClient } from "@libsql/client";
 import { describe, expect, it } from "vitest";
-import { normalizeRows, planWindows, reportSpec, storeWindow, syncAds as syncAllAds } from "../../server/ads/sync.js";
+import { normalizeRows, planWindows, reportSpec, storeWindow, syncAds } from "../../server/ads/sync.js";
 import { migrate } from "../../server/db.js";
 import { addDays } from "../../server/http.js";
 
@@ -8,7 +8,6 @@ const PROFILE = "111";
 const LAST = "2026-11-21"; // yesterday in Los Angeles at NOW
 const NOW = Date.UTC(2026, 10, 22, 15); // 07:00 in Los Angeles
 const HOUR = 3_600_000;
-const syncAds = options => syncAllAds({ products: ["SP", "SB", "SD"], ...options });
 
 const datesBetween = (start, end) => {
   const out = [];
