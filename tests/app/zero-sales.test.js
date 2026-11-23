@@ -56,4 +56,41 @@ describe("Search Terms with 0 Sales card", () => {
     dialog.querySelector("[data-ok]").click();
     await vi.waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes("minSpend=15") && String(url).includes("maxOrders=1"))).toBe(true));
   });
+
+  it("keeps the latest request's results when an older response arrives last", async () => {
+    stubNavigation();
+    const replies = [];
+    const json = body => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(resolve => replies.push(body => resolve(json(body))))));
+    const withTerm = term => ({ ...response(0), total: 1, rows: [{ term, sponsored: "Products", impressions: 1, clicks: 1, pl: -1 }] });
+    const firstRow = () => document.querySelector("[data-zero-card] tbody tr:not(.sumrow)").textContent;
+    openApp("/Ads");
+    await vi.waitFor(() => expect(replies).toHaveLength(1));
+    replies[0](response(0));
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const select = document.querySelector("[data-zero-days]");
+    for (const days of ["14", "7"]) {
+      select.value = days;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await vi.waitFor(() => expect(replies).toHaveLength(3));
+    replies[2](withTerm("latest seven-day term"));
+    await vi.waitFor(() => expect(firstRow()).toContain("latest seven-day term"));
+    replies[1](withTerm("older fourteen-day term"));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(firstRow()).toContain("latest seven-day term");
+  });
+
+  it("warns until Sponsored Brands search terms can be matched to products", async () => {
+    stubNavigation();
+    const coverage = mapReady => ({ SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30, mapReady } });
+    let ready = false;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...response(0), coverage: coverage(ready) }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-status]")).not.toBeNull());
+    expect(document.querySelector("[data-zero-status]").textContent).toContain("matched to products");
+    ready = true;
+    document.querySelector("[data-apply]").click();
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-status]")).toBeNull());
+  });
 });

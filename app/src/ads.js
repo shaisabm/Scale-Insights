@@ -72,8 +72,12 @@
   const zeroStatus = data => {
     if (!SP.usesRealData()) return "";
     const coverage = Object.values(data.coverage || {});
-    if (coverage.length && coverage.every(c => c.days >= c.expectedDays)) return "";
-    return `<div class="zero-status" data-zero-status>Search term reports are ${coverage.some(c => c.pending) ? "still being prepared" : "not fully synced"}. <button class="link-btn" data-zero-sync>Sync now</button></div>`;
+    // Synced days only count once the products they belong to can be matched (mapReady).
+    if (coverage.length && coverage.every(c => c.days >= c.expectedDays && c.mapReady !== false)) return "";
+    const reason = coverage.some(c => c.pending) ? "Search term reports are still being prepared."
+      : coverage.some(c => c.days < c.expectedDays) ? "Search term reports are not fully synced."
+      : "Sponsored Brands search terms can't be matched to products yet.";
+    return `<div class="zero-status" data-zero-status>${reason} <button class="link-btn" data-zero-sync>Sync now</button></div>`;
   };
   const zeroEdit = () => {
     const track = new Set(["Impressions", "Clicks", "P&L"]);
@@ -121,12 +125,17 @@
         if (old) old.remove();
         card.insertAdjacentHTML("afterbegin", zeroStatus(next));
       };
+      // Each request gets a number; only the latest one may update the panel, so a slower,
+      // superseded response can't replace newer results.
+      let latest = 0;
       const fetchPage = async page => {
+        const id = ++latest;
         if (!SP.usesRealData()) return update(sampleZero());
         try {
           const query = new URLSearchParams({ days: String(days), page: String(page), minSpend: String(minSpend), maxOrders: String(maxOrders), hideAsins: String(hideAsins) });
-          update(await SP.api.get(`/api/ads/zero-sales?${query}`));
-        } catch (err) { SP.toast(err.message); }
+          const next = await SP.api.get(`/api/ads/zero-sales?${query}`);
+          if (id === latest) update(next);
+        } catch (err) { if (id === latest) SP.toast(err.message); }
       };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");

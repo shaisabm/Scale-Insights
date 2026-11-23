@@ -49,8 +49,11 @@ export const REPORTS = {
 
 export const SEARCH_PRODUCTS = ["SP_SEARCH", "SB_SEARCH"];
 
-/** Map Sponsored Brands ad groups to their advertised ASINs without changing any ads. */
-export async function refreshSbProducts(db, ads, profileId) {
+/**
+ * Map Sponsored Brands ad groups to their advertised ASINs without changing any ads. The map is
+ * replaced only after every page lists, so a failed refresh keeps the last usable one.
+ */
+export async function refreshSbProducts(db, ads, profileId, readyAt = new Date().toISOString()) {
   const rows = [];
   let nextToken;
   do {
@@ -69,6 +72,7 @@ export async function refreshSbProducts(db, ads, profileId) {
   await db.batch([
     { sql: "DELETE FROM ads_search_product_map WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
     ...rows.map(r => ({ sql: "INSERT OR IGNORE INTO ads_search_product_map (profile_id, ad_product, campaign_id, ad_group_id, asin) VALUES (?, 'SB_SEARCH', ?, ?, ?)", args: [profileId, r.campaignId, r.adGroupId, r.asin] })),
+    { sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, ready_at, error) VALUES (?, 'SB_SEARCH', ?, NULL) ON CONFLICT (profile_id, ad_product) DO UPDATE SET ready_at = excluded.ready_at, error = NULL", args: [profileId, readyAt] },
   ], "write");
   return rows.length;
 }
@@ -179,8 +183,15 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   const summary = { requested: 0, stored: 0, failed: 0, pending: 0, rows: 0, errors: [] };
 
   if (products.includes("SB_SEARCH") && typeof ads.request === "function") {
-    try { await refreshSbProducts(db, ads, profileId); }
-    catch (err) { summary.errors.push(`SB product map: ${err.message}`); }
+    try { await refreshSbProducts(db, ads, profileId, iso()); }
+    catch (err) {
+      summary.errors.push(`SB product map: ${err.message}`);
+      // Record why, but keep ready_at (and the map) from the last refresh that worked.
+      await db.execute({
+        sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, ready_at, error) VALUES (?, 'SB_SEARCH', NULL, ?) ON CONFLICT (profile_id, ad_product) DO UPDATE SET error = excluded.error",
+        args: [profileId, err.message],
+      });
+    }
   }
 
   const pendingRequests = async () =>

@@ -23,8 +23,9 @@ export async function zeroSales(db, { profileId, from, to, page = 0, pageSize = 
     { sql: "SELECT ad_product FROM ads_report_requests WHERE profile_id = ? AND ad_product IN ('SP_SEARCH', 'SB_SEARCH') AND status IN ('PENDING', 'PROCESSING') GROUP BY ad_product", args: [profileId] },
     { sql: "SELECT campaign_id, ad_group_id, COUNT(DISTINCT asin) AS products, MIN(asin) AS asin FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
     { sql: "SELECT campaign_id, ad_group_id, COUNT(DISTINCT asin) AS products, MIN(asin) AS asin FROM ads_search_product_map WHERE profile_id = ? AND ad_product = 'SB_SEARCH' GROUP BY campaign_id, ad_group_id", args: [profileId] },
+    { sql: "SELECT ready_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
   ], "read");
-  const [raw, synced, pending, spProducts, sbProducts] = results;
+  const [raw, synced, pending, spProducts, sbProducts, sbMap] = results;
   const map = new Map();
   for (const [product, result] of [["SP_SEARCH", spProducts], ["SB_SEARCH", sbProducts]]) {
     for (const r of result.rows) if (Number(r.products) === 1) map.set(`${product}|${r.campaign_id}|${r.ad_group_id}`, r.asin);
@@ -56,8 +57,11 @@ export async function zeroSales(db, { profileId, from, to, page = 0, pageSize = 
   const coverage = Object.fromEntries(synced.rows.map(r => [r.ad_product, Number(r.days)]));
   const waiting = new Set(pending.rows.map(r => r.ad_product));
   const expectedDays = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  // Sponsored Brands rows need the ad group -> ASIN map; until one has been built they are all
+  // left out, so that coverage isn't complete however many days have synced.
+  const sbMapReady = Boolean(sbMap.rows[0]?.ready_at);
   return {
     from, to, page, pageSize, total, totals, rows,
-    coverage: Object.fromEntries(["SP_SEARCH", "SB_SEARCH"].map(k => [k, { days: coverage[k] || 0, expectedDays, pending: waiting.has(k) }])),
+    coverage: Object.fromEntries(["SP_SEARCH", "SB_SEARCH"].map(k => [k, { days: coverage[k] || 0, expectedDays, pending: waiting.has(k), ...(k === "SB_SEARCH" ? { mapReady: sbMapReady } : {}) }])),
   };
 }

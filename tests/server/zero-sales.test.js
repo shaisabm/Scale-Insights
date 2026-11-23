@@ -81,4 +81,38 @@ describe("search term reports", () => {
     expect((await zeroSales(db, { profileId, from, to })).rows.map(r => r.term)).toEqual(["battle ropes", "jump rope"]);
     expect((await db.execute("SELECT COUNT(*) AS n FROM ads_daily")).rows[0].n).toBe(1);
   });
+
+  it("keeps Sponsored Brands coverage incomplete until a product map has been built", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SB_SEARCH", start: from, end: to, rows: [searchRow("brand term", 10, { product: "SB_SEARCH" })], syncedAt: "now" });
+    const before = await zeroSales(db, { profileId, from, to });
+    expect(before.coverage.SB_SEARCH).toMatchObject({ days: 30, expectedDays: 30, mapReady: false });
+    expect(before.rows).toEqual([]);
+    await refreshSbProducts(db, { request: async () => ({ status: 200, data: { ads: [{ campaignId: "1", adGroupId: "2", creative: { asins: ["B0PRODUCTA"] } }] } }) }, profileId);
+    const after = await zeroSales(db, { profileId, from, to });
+    expect(after.coverage.SB_SEARCH).toMatchObject({ mapReady: true });
+    expect(after.rows.map(r => r.term)).toEqual(["brand term"]);
+  });
+
+  it("records each map refresh, and keeps the last usable map when a later refresh fails", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const listed = () => ({ status: 200, data: { ads: [{ campaignId: "1", adGroupId: "2", creative: { asins: ["B0PRODUCTA"] } }] } });
+    const down = () => ({ status: 503, data: {} });
+    const ads = list => ({
+      request: async () => list(),
+      async createReport(profile, spec) { return `report-${spec.startDate}`; },
+      async getReport(profile, id) { return { status: "COMPLETED", url: id }; },
+      async downloadReport() { return []; },
+    });
+    const run = list => syncAds({ db, ads: ads(list), profileId, products: ["SB_SEARCH"], now: () => Date.UTC(2026, 10, 22, 15), budgetMs: 30_000, sleep: async () => {} });
+    const mapReady = async () => (await zeroSales(db, { profileId, from, to })).coverage.SB_SEARCH.mapReady;
+    const mapRows = async () => Number((await db.execute("SELECT COUNT(*) AS n FROM ads_search_product_map")).rows[0].n);
+
+    expect((await run(down)).errors).toContain("SB product map: Sponsored Brands ad list failed: HTTP 503");
+    expect(await mapReady()).toBe(false);
+    await run(listed);
+    expect([await mapReady(), await mapRows()]).toEqual([true, 1]);
+    await run(down);
+    expect([await mapReady(), await mapRows()]).toEqual([true, 1]);
+  });
 });

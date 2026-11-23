@@ -42,6 +42,15 @@ const SCHEMA = [
     asin TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_product, campaign_id, ad_group_id, asin)
   )`,
+  // When that map last finished building (ready_at) and why the latest refresh failed, if it did.
+  // Without a ready map, search reports for the ad type can't count as complete.
+  `CREATE TABLE IF NOT EXISTS ads_product_map_status (
+    profile_id TEXT NOT NULL,
+    ad_product TEXT NOT NULL,
+    ready_at TEXT,
+    error TEXT,
+    PRIMARY KEY (profile_id, ad_product)
+  )`,
   // Which days have been stored, and when, so recent days can be refreshed.
   `CREATE TABLE IF NOT EXISTS ads_synced_days (
     profile_id TEXT NOT NULL,
