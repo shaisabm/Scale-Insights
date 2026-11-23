@@ -48,22 +48,24 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
       args: [profileId, from, to],
     },
     { sql: "SELECT ad_product FROM ads_report_requests WHERE profile_id = ? AND ad_product IN ('SP_SEARCH', 'SB_SEARCH') AND status IN ('PENDING', 'PROCESSING') GROUP BY ad_product", args: [profileId] },
-    { sql: "SELECT campaign_id, ad_group_id, COUNT(DISTINCT asin) AS products, MIN(asin) AS asin FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
+    { sql: "SELECT campaign_id, ad_group_id, GROUP_CONCAT(DISTINCT asin) AS asins FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
     { sql: "SELECT ready_through FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
   ], "read");
   const [raw, synced, pending, spProducts, sbMap, productRows] = results;
   const products = new Map(productRows.rows.map(r => [String(r.asin), r]));
   const spAsins = new Map();
-  for (const r of spProducts.rows) if (Number(r.products) === 1) spAsins.set(`${r.campaign_id}|${r.ad_group_id}`, r.asin);
+  for (const r of spProducts.rows) spAsins.set(`${r.campaign_id}|${r.ad_group_id}`, String(r.asins).split(",").sort().join(","));
   const grouped = new Map(), unattributed = { SP_SEARCH: 0, SB_SEARCH: 0 };
   for (const r of raw.rows) {
     // A search report has no advertised ASIN: Sponsored Products ad groups are matched through the
     // ads they reported in these dates, Sponsored Brands ones through what they advertised each day.
-    // Rows without exactly one known product can't be assigned honestly, so they're left out of
+    // An ad group advertising several products gives one row naming all of them, since the report
+    // can't say which of them a search was for. Rows whose products aren't known are left out of
     // this product-level insight and their spend is reported instead.
     const sb = r.ad_product === "SB_SEARCH";
-    const asin = sb ? (r.asins && !String(r.asins).includes(",") ? String(r.asins) : null) : spAsins.get(`${r.campaign_id}|${r.ad_group_id}`);
+    // Sorted, comma-separated ASINs.
+    const asin = sb ? (r.asins ? String(r.asins) : null) : spAsins.get(`${r.campaign_id}|${r.ad_group_id}`);
     if (!asin) {
       unattributed[r.ad_product] += Number(r.cost);
       continue;
@@ -86,10 +88,14 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   const total = matched.length;
   const shown = matched.slice(page * pageSize, (page + 1) * pageSize);
   // Images are served by /api/ads/product-image, which fetches them from Amazon on the server.
+  // title and image are the first product's; `products` lists every product the row names.
   const rows = shown.map(r => {
-    const product = products.get(r.asin);
+    const list = r.asin.split(",").map(asin => {
+      const product = products.get(asin);
+      return { asin, title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(asin)}` : null };
+    });
     // counts stays server-side; an undefined property is left out of the JSON.
-    return { ...r, counts: undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(r.asin)}` : null };
+    return { ...r, counts: undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: list[0].title, image: list[0].image, products: list };
   });
   // The source table's footer totals the current page; its ratios come from the page's sums.
   const sum = { impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };

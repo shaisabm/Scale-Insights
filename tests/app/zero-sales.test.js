@@ -175,6 +175,19 @@ describe("Search Terms with 0 Sales card", () => {
     expect(document.querySelector("[data-zero-card] .zero-product")).not.toBeNull();
   });
 
+  it("splits the thumbnail between the products a shared ad group advertises", async () => {
+    stubNavigation();
+    const products = [{ asin: "B0PRODUCTA", title: "Pink Ropes", image: "/api/ads/product-image?asin=B0PRODUCTA" }, { asin: "B0PRODUCTB", title: "", image: null }];
+    const body = { ...response(0), rows: [{ term: "battle ropes", sponsored: "Products", impressions: 5, clicks: 2, pl: -3, asin: "B0PRODUCTA,B0PRODUCTB", title: "Pink Ropes", image: products[0].image, products }] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] .zero-split")).not.toBeNull());
+    const split = document.querySelector("[data-zero-card] .zero-split");
+    // Each product is named, by its ASIN where it has no title.
+    expect(split.getAttribute("title")).toBe("Pink Ropes + B0PRODUCTB");
+    expect([...split.children].map(c => (c.tagName === "IMG" ? c.getAttribute("src") : c.className))).toEqual(["/api/ads/product-image?asin=B0PRODUCTA", "zero-split-none"]);
+  });
+
   it("offers every date range preset and asks for the picked dates", async () => {
     stubNavigation();
     const fetch = vi.fn(async () => new Response(JSON.stringify(response(0)), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -233,7 +246,7 @@ describe("Search Terms with 0 Sales card", () => {
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-status]")).not.toBeNull());
     const status = document.querySelector("[data-zero-status]");
-    expect(status.textContent).toBe("$45.50 of Sponsored Brands spend can't be matched to one product on its dates, so its search terms are left out.");
+    expect(status.textContent).toBe("$45.50 of Sponsored Brands spend can't be matched to the products it advertised on its dates, so its search terms are left out.");
     expect(status.querySelector("[data-zero-sync]")).toBeNull();
   });
 });

@@ -306,6 +306,24 @@ describe("search term reports", () => {
     expect(second.coverage.SB_SEARCH.unattributedSpend).toBe(42);
   });
 
+  it("shows search terms from an ad group advertising several products as one row naming each of them", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, rows: [searchRow("jump rope", 20)], syncedAt: "now" });
+    await storeWindow(db, { profileId, product: "SP", start: to, end: to, syncedAt: "now", rows: ["B0PRODUCTB", "B0PRODUCTA"].map(asin => (
+      { date: to, campaignId: "1", adGroupId: "2", asin, impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 })) });
+    await storeWindow(db, { profileId, product: "SB_SEARCH", start: to, end: to, rows: [searchRow("brand term", 15, { product: "SB_SEARCH", adGroupId: "3" })], syncedAt: "now" });
+    await scanOn(db, "2026-11-22", sbAd("3", ["B0PRODUCTD", "B0PRODUCTC"]));
+    await db.execute({ sql: "INSERT INTO ads_products (profile_id, asin, title, image_url, updated_at) VALUES (?, 'B0PRODUCTA', 'Pink Ropes', 'https://m.media-amazon.com/images/I/a.jpg', 't')", args: [profileId] });
+    const result = await zeroSales(db, { profileId, from, to, settings: { ...structuredClone(ZERO_DEFAULTS), filters: {} } });
+    const none = asin => ({ asin, title: "", image: null });
+    expect(result.rows.map(r => [r.term, r.asin, r.products])).toEqual([
+      ["jump rope", "B0PRODUCTA,B0PRODUCTB", [{ asin: "B0PRODUCTA", title: "Pink Ropes", image: "/api/ads/product-image?asin=B0PRODUCTA" }, none("B0PRODUCTB")]],
+      ["brand term", "B0PRODUCTC,B0PRODUCTD", [none("B0PRODUCTC"), none("B0PRODUCTD")]],
+    ]);
+    expect(result.rows[0]).toMatchObject({ title: "Pink Ropes", image: "/api/ads/product-image?asin=B0PRODUCTA", pl: -20 });
+    expect([result.coverage.SP_SEARCH.unattributedSpend, result.coverage.SB_SEARCH.unattributedSpend]).toEqual([0, 0]);
+  });
+
   it("counts Sponsored Brands as matched only through the dates the latest finished list confirms", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     const ready = async () => (await zeroSales(db, { profileId, from, to, today: "2026-11-22" })).coverage.SB_SEARCH.mapReady;

@@ -7,11 +7,12 @@ const PAGE = 300;
  * metadata lookup. Products Amazon doesn't return keep whatever was stored before.
  */
 export async function refreshProducts(db, ads, profileId, at = new Date().toISOString()) {
+  // History rows list an ad group's ASINs comma-separated; a group advertising several needs them all.
   const known = await db.execute({
-    sql: "SELECT asin FROM ads_daily WHERE profile_id = ? AND asin <> '' UNION SELECT asins FROM ads_search_product_history WHERE profile_id = ? AND asins NOT LIKE '%,%'",
+    sql: "SELECT DISTINCT asin FROM ads_daily WHERE profile_id = ? AND asin <> '' UNION SELECT asins FROM ads_search_product_history WHERE profile_id = ?",
     args: [profileId, profileId],
   });
-  const asins = known.rows.map(r => String(r.asin));
+  const asins = [...new Set(known.rows.flatMap(r => String(r.asin).split(",")))].sort();
   const stmts = [];
   for (let i = 0; i < asins.length; i += PAGE) {
     const { status, data } = await ads.request("POST", "/product/metadata", {

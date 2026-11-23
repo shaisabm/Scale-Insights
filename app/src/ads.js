@@ -89,10 +89,17 @@
       coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
     };
   }
-  const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", sp: r.sponsored }));
+  const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
-  const zeroProduct = (p, r) => r.image ? `<img class="zero-thumb" src="${SP.esc(r.image)}" alt="${SP.esc(r.title || r.asin)}" title="${SP.esc(r.title || r.asin)}" loading="lazy">`
-    : p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>`;
+  // A row naming several products (an ad group advertising them all) splits the thumbnail between them.
+  const zeroProduct = (p, r) => {
+    if (r.products.length > 1) {
+      const names = r.products.map(x => x.title || x.asin).join(" + ");
+      return `<span class="zero-thumb zero-split" title="${SP.esc(names)}" role="img" aria-label="${SP.esc(names)}">${r.products.map(x => (x.image ? `<img src="${SP.esc(x.image)}" alt="" loading="lazy">` : `<span class="zero-split-none"></span>`)).join("")}</span>`;
+    }
+    return r.image ? `<img class="zero-thumb" src="${SP.esc(r.image)}" alt="${SP.esc(r.title || r.asin)}" title="${SP.esc(r.title || r.asin)}" loading="lazy">`
+      : p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>`;
+  };
   const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands" };
   const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
   const zeroPager = data => data.total > 7 ? `<div class="zero-pager" data-zero-pager><button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${Math.ceil(data.total / 7)}</span><button data-zero-next ${data.page >= Math.ceil(data.total / 7) - 1 ? "disabled" : ""}>Next ›</button></div>` : `<div class="zero-pager" data-zero-pager></div>`;
@@ -105,9 +112,9 @@
     if (older.length) notes.push(`Amazon only keeps recent search terms: ${older.map(([k, c]) => `${SEARCH_TYPES[k] || k} from ${day(c.availableFrom)}`).join(", ")}.`);
     const reported = coverage.map(c => c.reportedThrough).filter(Boolean).sort()[0];
     if (reported && data.to > reported) notes.push(`Amazon hasn't reported search terms after ${day(reported)} yet.`);
-    // Rows the server couldn't tie to one advertised product on their dates.
+    // Rows the server couldn't tie to the products advertised on their dates.
     const unmatched = entries.filter(([, c]) => c.unattributedSpend > 0);
-    if (unmatched.length) notes.push(`${unmatched.map(([k, c]) => `${SP.money(c.unattributedSpend)} of ${SEARCH_TYPES[k] || k} spend`).join(" and ")} can't be matched to one product on its dates, so its search terms are left out.`);
+    if (unmatched.length) notes.push(`${unmatched.map(([k, c]) => `${SP.money(c.unattributedSpend)} of ${SEARCH_TYPES[k] || k} spend`).join(" and ")} can't be matched to the products it advertised on its dates, so its search terms are left out.`);
     // Synced days only count once the products they belong to can be matched (mapReady).
     const incomplete = !coverage.length || coverage.some(c => c.days < c.expectedDays || c.mapReady === false);
     if (!incomplete) return notes.length ? `<div class="zero-status" data-zero-status>${notes.join(" ")}</div>` : "";

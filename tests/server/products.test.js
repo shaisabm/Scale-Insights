@@ -13,10 +13,11 @@ describe("refreshProducts", () => {
   it("stores titles and images for every ASIN the ads data mentions, with one read-only lookup", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SP", start: "2026-11-01", end: "2026-11-01", rows: [{ date: "2026-11-01", campaignId: "1", adGroupId: "2", asin: "B0AAAAAAAA", impressions: 1, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 }], syncedAt: "t" });
-    await db.execute({ sql: "INSERT INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) VALUES (?, 'SB_SEARCH', '7', '8', 'B0BBBBBBBB', '2026-10-01', '2026-11-21', 't')", args: [profileId] });
+    // An ad group advertising two products needs both products' details.
+    await db.execute({ sql: "INSERT INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) VALUES (?, 'SB_SEARCH', '7', '8', 'B0BBBBBBBB,B0CCCCCCCC', '2026-10-01', '2026-11-21', 't')", args: [profileId] });
     const request = vi.fn(async () => ({ status: 200, data: { ProductMetadataList: [product("B0AAAAAAAA"), product("B0BBBBBBBB", { imageUrl: undefined })] } }));
     expect(await refreshProducts(db, { request }, profileId, "2026-11-22T00:00:00.000Z")).toBe(2);
-    expect(request).toHaveBeenCalledWith("POST", "/product/metadata", expect.objectContaining({ profileId, body: expect.objectContaining({ asins: ["B0AAAAAAAA", "B0BBBBBBBB"] }) }));
+    expect(request).toHaveBeenCalledWith("POST", "/product/metadata", expect.objectContaining({ profileId, body: expect.objectContaining({ asins: ["B0AAAAAAAA", "B0BBBBBBBB", "B0CCCCCCCC"] }) }));
     const { rows } = await db.execute("SELECT asin, title, image_url FROM ads_products ORDER BY asin");
     expect(rows.map(r => [r.asin, r.title, r.image_url])).toEqual([
       ["B0AAAAAAAA", "Title B0AAAAAAAA", "https://m.media-amazon.com/images/I/B0AAAAAAAA.jpg"],
