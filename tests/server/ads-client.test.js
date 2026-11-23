@@ -33,6 +33,8 @@ describe("isReadOnly", () => {
     expect(isReadOnly("POST", "/reporting/reports")).toBe(true);
     expect(isReadOnly("POST", "/sp/campaigns/list")).toBe(true);
     expect(isReadOnly("POST", "/sp/keywords/list?x=1")).toBe(true);
+    expect(isReadOnly("POST", "/product/metadata")).toBe(true);
+    expect(isReadOnly("POST", "/product/metadata/extra")).toBe(false);
   });
 
   it("treats everything else as a write", () => {

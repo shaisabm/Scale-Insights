@@ -1,5 +1,6 @@
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
+import { refreshProducts } from "./products.js";
 
 // Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands and Sponsored
 // Display per campaign (14-day). These match the Amazon Ads console's columns for each ad type.
@@ -30,7 +31,7 @@ export const REPORTS = {
     row: r => ({ campaignId: r.campaignId, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
   },
   SP_SEARCH: {
-    historyDays: 30,
+    historyDays: 90,
     adProduct: "SPONSORED_PRODUCTS",
     reportTypeId: "spSearchTerm",
     groupBy: ["searchTerm"],
@@ -38,7 +39,7 @@ export const REPORTS = {
     row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases7d, sales: r.sales7d }),
   },
   SB_SEARCH: {
-    historyDays: 30,
+    historyDays: 60,
     adProduct: "SPONSORED_BRANDS",
     reportTypeId: "sbSearchTerm",
     groupBy: ["searchTerm"],
@@ -271,5 +272,11 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
     await collect();
   }
   summary.pending = (await pendingRequests()).length;
+
+  // The search term insight shows each product's title and image.
+  if (products.some(p => SEARCH_PRODUCTS.includes(p)) && typeof ads.request === "function") {
+    try { await refreshProducts(db, ads, profileId, iso()); }
+    catch (err) { summary.errors.push(`Product details: ${err.message}`); }
+  }
   return summary;
 }

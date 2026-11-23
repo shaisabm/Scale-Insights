@@ -27,6 +27,22 @@
   SP.iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   SP.lastDate = SP.addDays(SP.today, -2);
 
+  // Date-range presets every range picker offers. "Last N Days" ends yesterday, like Amazon's reports.
+  SP.RANGE_PRESETS = ["Today", "Yesterday", "Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 60 Days", "Last 90 Days", "This Month", "Last Month", "This Year", "Last Year", "Custom Range"];
+  SP.rangeFor = (preset, today = SP.today) => {
+    const y = today.getFullYear(), m = today.getMonth(), lastN = /^Last (\d+) Days$/.exec(preset);
+    if (lastN) return { from: SP.addDays(today, -Number(lastN[1])), to: SP.addDays(today, -1) };
+    return {
+      Today: { from: today, to: today },
+      Yesterday: { from: SP.addDays(today, -1), to: SP.addDays(today, -1) },
+      "This Month": { from: new Date(y, m, 1), to: today },
+      "Last Month": { from: new Date(y, m - 1, 1), to: new Date(y, m, 0) },
+      "This Year": { from: new Date(y, 0, 1), to: today },
+      "Last Year": { from: new Date(y - 1, 0, 1), to: new Date(y - 1, 11, 31) },
+    }[preset] || null;
+  };
+  SP.rangeLabel = (preset, from, to) => `${preset && preset !== "Custom Range" ? `${preset}: ` : ""}${SP.iso(from) === SP.iso(to) ? SP.shortDate(from) : `${SP.shortDate(from)} - ${SP.shortDate(to)}`}`;
+
   // ---------- Server API ----------
   // JSON calls to this site's /api routes. A 401 sends the person to sign in, then back here.
   SP.signInPath = "/Identity/Login";
@@ -233,9 +249,10 @@
   SP.ctl = {
     num: (label, val, name) => `<label class="ctl"><span>${label}</span><input type="number" min="1" max="24" value="${val}" data-k="${name}"></label>`,
     date: (label, d, name = "last") => `<label class="ctl"><span>${label}</span><input type="date" value="${SP.iso(d)}" data-k="${name}"></label>`,
+    // Picking a range fires a bubbling "rangechange" event with { preset, from, to } as "YYYY-MM-DD".
     range: (label, days = 30, preset = "") => {
-      const s = SP.addDays(SP.today, -days + 1), e = SP.today;
-      return `<div class="anchor"><button class="ctl ctl-btn" data-range="${days}">${SP.svg('<rect x="4" y="5" width="16" height="15" rx="2" class="fill"/><path d="M8 3v4M16 3v4"/>', "cal")}<span class="rlabel">${preset ? preset + ": " : ""}${label || `${SP.shortDate(s)} - ${SP.shortDate(e)}`}</span>${SP.caret}</button></div>`;
+      const { from, to } = SP.rangeFor(preset || `Last ${days} Days`);
+      return `<div class="anchor"><button class="ctl ctl-btn" data-range="${days}" data-preset="${preset || `Last ${days} Days`}" data-from="${SP.iso(from)}" data-to="${SP.iso(to)}">${SP.svg('<rect x="4" y="5" width="16" height="15" rx="2" class="fill"/><path d="M8 3v4M16 3v4"/>', "cal")}<span class="rlabel">${label || SP.rangeLabel(preset, from, to)}</span>${SP.caret}</button></div>`;
     },
     products: (ph = "Select products") => `<div class="anchor"><button class="ctl ctl-btn sel" data-products><span class="plabel">${ph}</span>${SP.caret}</button></div>`,
     select: (ph, opts, cls = "") => `<div class="anchor"><button class="ctl ctl-btn sel ${cls}" data-select='${SP.esc(JSON.stringify(opts))}'><span class="slabel">${ph}</span>${SP.caret}</button></div>`,
@@ -479,11 +496,19 @@
       const rng = t.closest("[data-range]");
       if (rng) {
         e.stopPropagation();
-        const presets = [["Today", 1], ["Yesterday", 1, 1], ["Last 7 Days", 7], ["Last 14 Days", 14], ["Last 30 Days", 30], ["Last 60 Days", 60], ["Last 90 Days", 90]];
-        SP.popover(rng, presets.map(([l, d, off]) => ({ label: l, d, off })), it => {
-          const end = SP.addDays(SP.today, -(it.off || 0)), s = SP.addDays(end, -it.d + 1);
-          rng.dataset.range = it.d;
-          SP.$(".rlabel", rng).textContent = it.d === 1 ? `${it.label}: ${SP.shortDate(end)}` : `${it.label}: ${SP.shortDate(s)} - ${SP.shortDate(end)}`;
+        const set = (preset, from, to) => {
+          Object.assign(rng.dataset, { preset, from: SP.iso(from), to: SP.iso(to) });
+          SP.$(".rlabel", rng).textContent = SP.rangeLabel(preset, from, to);
+          rng.dispatchEvent(new CustomEvent("rangechange", { bubbles: true, detail: { preset, from: SP.iso(from), to: SP.iso(to) } }));
+        };
+        SP.popover(rng, SP.RANGE_PRESETS.map(label => ({ label, on: label === rng.dataset.preset })), it => {
+          if (it.label !== "Custom Range") { const r = SP.rangeFor(it.label); set(it.label, r.from, r.to); return; }
+          const day = name => `<label class="field"><span>${name === "from" ? "Start date" : "End date"}</span><input type="date" name="${name}" value="${rng.dataset[name] || ""}" max="${SP.iso(SP.today)}"></label>`;
+          SP.modal("Custom range", day("from") + day("to"), m => {
+            const from = SP.$("[name=from]", m).value, to = SP.$("[name=to]", m).value;
+            if (!from || !to || from > to) { SP.toast("Choose a start date on or before the end date."); return false; }
+            set("Custom Range", new Date(`${from}T00:00:00`), new Date(`${to}T00:00:00`));
+          }, "Apply");
         });
         return;
       }

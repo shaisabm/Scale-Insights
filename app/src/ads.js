@@ -67,17 +67,29 @@
     rows: TERMS.map(([term, impressions, clicks, pl], i) => ({ term, impressions, clicks, pl, sponsored: "Products", p: P[i % 2] })),
     coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
   });
-  const zeroRows = data => data.rows.map(r => ({ p: r.p || null, asin: r.asin || "", sp: r.sponsored, term: r.term, imp: r.impressions, clicks: r.clicks, pl: r.pl }));
+  const zeroRows = data => data.rows.map(r => ({ p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", sp: r.sponsored, term: r.term, imp: r.impressions, clicks: r.clicks, pl: r.pl }));
+  // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
+  const zeroProduct = (p, r) => r.image ? `<img class="zero-thumb" src="${SP.esc(r.image)}" alt="${SP.esc(r.title || r.asin)}" title="${SP.esc(r.title || r.asin)}" loading="lazy">`
+    : p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>`;
+  const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands" };
+  const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
   const zeroPager = data => data.total > 7 ? `<div class="zero-pager" data-zero-pager><button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${Math.ceil(data.total / 7)}</span><button data-zero-next ${data.page >= Math.ceil(data.total / 7) - 1 ? "disabled" : ""}>Next ›</button></div>` : `<div class="zero-pager" data-zero-pager></div>`;
   const zeroStatus = data => {
     if (!SP.usesRealData()) return "";
-    const coverage = Object.values(data.coverage || {});
+    const entries = Object.entries(data.coverage || {}), coverage = entries.map(([, c]) => c);
+    // Dates Amazon doesn't provide (older than it keeps, or not reported yet) are explained; a sync can't add them.
+    const notes = [];
+    const older = entries.filter(([, c]) => c.availableFrom && data.from < c.availableFrom);
+    if (older.length) notes.push(`Amazon only keeps recent search terms: ${older.map(([k, c]) => `${SEARCH_TYPES[k] || k} from ${day(c.availableFrom)}`).join(", ")}.`);
+    const reported = coverage.map(c => c.reportedThrough).filter(Boolean).sort()[0];
+    if (reported && data.to > reported) notes.push(`Amazon hasn't reported search terms after ${day(reported)} yet.`);
     // Synced days only count once the products they belong to can be matched (mapReady).
-    if (coverage.length && coverage.every(c => c.days >= c.expectedDays && c.mapReady !== false)) return "";
+    const incomplete = !coverage.length || coverage.some(c => c.days < c.expectedDays || c.mapReady === false);
+    if (!incomplete) return notes.length ? `<div class="zero-status" data-zero-status>${notes.join(" ")}</div>` : "";
     const reason = coverage.some(c => c.pending) ? "Search term reports are still being prepared."
-      : coverage.some(c => c.days < c.expectedDays) ? "Search term reports are not fully synced."
-      : "Sponsored Brands search terms can't be matched to products yet.";
-    return `<div class="zero-status" data-zero-status>${reason} <button class="link-btn" data-zero-sync>Sync now</button></div>`;
+      : coverage.some(c => c.mapReady === false) && coverage.every(c => c.days >= c.expectedDays) ? "Sponsored Brands search terms can't be matched to products yet."
+      : "Search term reports are not fully synced.";
+    return `<div class="zero-status" data-zero-status>${[reason, ...notes].join(" ")} <button class="link-btn" data-zero-sync>Sync now</button></div>`;
   };
   const zeroEdit = () => {
     const track = new Set(["Impressions", "Clicks", "P&L"]);
@@ -87,9 +99,13 @@
 
   SP.pages["/Ads"] = {
     title: "Insights overview",
-    load: () => (SP.usesRealData() ? SP.api.get("/api/ads/zero-sales?days=30&page=0") : Promise.resolve(sampleZero())),
+    load: () => {
+      if (!SP.usesRealData()) return Promise.resolve(sampleZero());
+      const r = SP.rangeFor("Last 30 Days");
+      return SP.api.get(`/api/ads/zero-sales?${new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" })}`);
+    },
     render(data) {
-      const c1 = `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: [{ key: "p", label: "Product", muted: true, fmt: (p, r) => p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>` }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "pl", label: "P&amp;L", align: "r", fmt: v => v == null ? "" : pl(v) }],
+      const c1 = `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "pl", label: "P&amp;L", align: "r", fmt: v => v == null ? "" : pl(v) }],
         rows: zeroRows(data), sum: { imp: data.totals.impressions, clicks: data.totals.clicks, pl: data.totals.pl } })}${zeroPager(data)}`;
       const c2 = SP.grid({ id: "i2", search: false, noFoot: true, cls: "fit", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "clicks", label: "Clicks", align: "r" }, { key: "spend", label: "Spend", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "conv", label: "Conversion", align: "r", fmt: v => pct(v) }, { key: "acos", label: "ACOS", align: "r", fmt: v => pct(v) }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ p: P[0], sp: "Products", term: "cordless jump rope", clicks: 28, spend: 25.87, cpc: 0.92, conv: 3.57, acos: 123.25, pl: -24.8 }], sum: rs => ({ ...rs[0], p: null, sp: null, term: null }) });
@@ -97,10 +113,8 @@
       const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
         sum: rs => ({ clicks: rs.reduce((a, r) => a + r.clicks, 0), cpc: rs.reduce((a, r) => a + r.cpc, 0) / rs.length, pl: rs.reduce((a, r) => a + r.pl, 0) }) });
-      const end = data.to ? new Date(`${data.to}T12:00:00`) : SP.addDays(SP.today, -1);
-      const start = data.from ? new Date(`${data.from}T12:00:00`) : SP.addDays(end, -29);
       const waitingCard = title => `<section class="icard"><header><h3>${title}</h3></header><div class="icard-body"><p>Live data for this insight is not connected yet.</p></div></section>`;
-      const insights = `${SP.panel(`<div class="frow"><label class="zero-date">Last <select data-zero-days><option value="30">30</option><option value="14">14</option><option value="7">7</option></select> Days: <span data-zero-dates>${SP.shortDate(start)} - ${SP.shortDate(end)}</span></label>${ctl.apply()}</div>`, "")}
+      const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
         ${card("Search Terms with 0 Sales", c1, "[Tip]: You can remove poor search terms automatically with [Automation].", "st0")}
         ${SP.usesRealData() ? ["Search Terms with High ACOS", "Performing Search Terms", "Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Search Terms with High ACOS", c2, "[Tip]: Use [Automation] strategies to improve your advertising results.", "acos")}${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
@@ -108,13 +122,13 @@
     },
     wire(root, data) {
       let current = data;
-      let days = 30;
+      const initial = SP.rangeFor("Last 30 Days");
+      let range = { from: data.from || SP.iso(initial.from), to: data.to || SP.iso(initial.to) };
       let minSpend = 10;
       let maxOrders = 0;
       let hideAsins = true;
       const update = next => {
         current = next;
-        if (next.from && next.to) $("[data-zero-dates]", root).textContent = `${SP.shortDate(new Date(`${next.from}T12:00:00`))} - ${SP.shortDate(new Date(`${next.to}T12:00:00`))}`;
         const g = SP._grids.i1;
         g.rows = zeroRows(next);
         g.sum = { imp: next.totals.impressions, clicks: next.totals.clicks, pl: next.totals.pl };
@@ -132,7 +146,7 @@
         const id = ++latest;
         if (!SP.usesRealData()) return update(sampleZero());
         try {
-          const query = new URLSearchParams({ days: String(days), page: String(page), minSpend: String(minSpend), maxOrders: String(maxOrders), hideAsins: String(hideAsins) });
+          const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page), minSpend: String(minSpend), maxOrders: String(maxOrders), hideAsins: String(hideAsins) });
           const next = await SP.api.get(`/api/ads/zero-sales?${query}`);
           if (id === latest) update(next);
         } catch (err) { if (id === latest) SP.toast(err.message); }
@@ -156,11 +170,8 @@
         if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(current.page)).catch(err => SP.toast(err.message));
         if (e.target.closest("[data-apply]")) fetchPage(0);
       });
-      root.addEventListener("change", e => {
-        if (!e.target.matches("[data-zero-days]")) return;
-        days = Number(e.target.value);
-        const end = SP.addDays(SP.today, -1), start = SP.addDays(end, -days + 1);
-        $("[data-zero-dates]", root).textContent = `${SP.shortDate(start)} - ${SP.shortDate(end)}`;
+      root.addEventListener("rangechange", e => {
+        range = { from: e.detail.from, to: e.detail.to };
         fetchPage(0);
       });
     },

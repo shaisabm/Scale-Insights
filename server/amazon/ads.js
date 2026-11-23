@@ -3,9 +3,9 @@ import { getAccessToken } from "./lwa.js";
 
 const REPORT_MEDIA = "application/vnd.createasyncreportrequest.v3+json";
 
-// POSTs that only read: report requests (they create a download, not a change to the account)
-// and the v3 list endpoints such as /sp/campaigns/list.
-const READ_POSTS = [/^\/reporting\/reports$/, /\/list$/];
+// POSTs that only read: report requests (they create a download, not a change to the account),
+// the product metadata lookup, and the v3 list endpoints such as /sp/campaigns/list.
+const READ_POSTS = [/^\/reporting\/reports$/, /^\/product\/metadata$/, /\/list$/];
 
 export function isReadOnly(method, path) {
   if (method === "GET") return true;

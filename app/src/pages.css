@@ -227,8 +227,7 @@ table.part { border-collapse: collapse; font-size: .9375rem; }
 .icard-body { padding: 14px 16px 0; overflow-x: auto; }
 .icard-body .grid-wrap { margin: 0; }
 .icard footer { background: #f5f6f7; padding: 18px 16px; color: #5f6672; font-size: .9375rem; margin-top: 16px; }
-.zero-date { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px; background: #fff; }
-.zero-date select { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.zero-thumb { display: block; width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 6px; }
 .zero-pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-height: 32px; margin-top: 8px; font-size: .875rem; }
 .zero-pager button { border: 1px solid var(--border); border-radius: 4px; background: #fff; color: var(--link); padding: 5px 10px; cursor: pointer; }
 .zero-pager button:disabled { opacity: .45; cursor: default; }

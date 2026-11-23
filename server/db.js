@@ -42,6 +42,15 @@ const SCHEMA = [
     asin TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_product, campaign_id, ad_group_id, asin)
   )`,
+  // Titles and image URLs of advertised products, from the Ads API product metadata lookup.
+  `CREATE TABLE IF NOT EXISTS ads_products (
+    profile_id TEXT NOT NULL,
+    asin TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    image_url TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, asin)
+  )`,
   // When that map last finished building (ready_at) and why the latest refresh failed, if it did.
   // Without a ready map, search reports for the ad type can't count as complete.
   `CREATE TABLE IF NOT EXISTS ads_product_map_status (
