@@ -8,7 +8,7 @@ const PAGE = 300;
  */
 export async function refreshProducts(db, ads, profileId, at = new Date().toISOString()) {
   const known = await db.execute({
-    sql: "SELECT asin FROM ads_daily WHERE profile_id = ? AND asin <> '' UNION SELECT asin FROM ads_search_product_map WHERE profile_id = ?",
+    sql: "SELECT asin FROM ads_daily WHERE profile_id = ? AND asin <> '' UNION SELECT asins FROM ads_search_product_history WHERE profile_id = ? AND asins NOT LIKE '%,%'",
     args: [profileId, profileId],
   });
   const asins = known.rows.map(r => String(r.asin));

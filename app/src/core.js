@@ -58,7 +58,7 @@
     if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (HTTP ${res.status})`), { status: res.status });
     return data;
   };
-  SP.api = { get: path => apiCall("GET", path), post: (path, body = {}) => apiCall("POST", path, body) };
+  SP.api = { get: path => apiCall("GET", path), post: (path, body = {}) => apiCall("POST", path, body), put: (path, body = {}) => apiCall("PUT", path, body) };
 
   // ---------- Data source ----------
   // Production always shows the real account. Preview deployments and local development start on

@@ -30,17 +30,44 @@ const SCHEMA = [
     clicks INTEGER NOT NULL DEFAULT 0,
     cost REAL NOT NULL DEFAULT 0,
     orders INTEGER NOT NULL DEFAULT 0,
+    units INTEGER NOT NULL DEFAULT 0,
     sales REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, search_term)
   )`,
-  // Sponsored Brands search reports identify an ad group, while the ads list identifies its ASIN.
-  `CREATE TABLE IF NOT EXISTS ads_search_product_map (
+  // Settings people save for an insight card (filters, sort, columns), as JSON per profile.
+  `CREATE TABLE IF NOT EXISTS ads_insight_settings (
+    profile_id TEXT NOT NULL,
+    insight TEXT NOT NULL,
+    settings TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, insight)
+  )`,
+  // Sponsored Brands search reports identify an ad group, while the ads list identifies its ASINs
+  // (sorted, comma-separated) as they are now. Each row is a date range the group is known to have
+  // advertised them, so a search term is matched by its date: from the day after the group's ads
+  // last changed, through the day before the ads list that last confirmed it (observed_at).
+  `CREATE TABLE IF NOT EXISTS ads_search_product_history (
     profile_id TEXT NOT NULL,
     ad_product TEXT NOT NULL,
     campaign_id TEXT NOT NULL,
     ad_group_id TEXT NOT NULL,
-    asin TEXT NOT NULL,
-    PRIMARY KEY (profile_id, ad_product, campaign_id, ad_group_id, asin)
+    asins TEXT NOT NULL,
+    valid_from TEXT NOT NULL,
+    valid_to TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product, campaign_id, ad_group_id, valid_from)
+  )`,
+  // Ads read so far by a Sponsored Brands ads list, which may take more than one sync to finish.
+  `CREATE TABLE IF NOT EXISTS ads_sb_ads_scan (
+    profile_id TEXT NOT NULL,
+    ad_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    ad_group_id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    asins TEXT NOT NULL,
+    created_ms INTEGER,
+    updated_ms INTEGER,
+    PRIMARY KEY (profile_id, ad_id)
   )`,
   // Titles and image URLs of advertised products, from the Ads API product metadata lookup.
   `CREATE TABLE IF NOT EXISTS ads_products (
@@ -51,13 +78,16 @@ const SCHEMA = [
     updated_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, asin)
   )`,
-  // When that map last finished building (ready_at) and why the latest refresh failed, if it did.
-  // Without a ready map, search reports for the ad type can't count as complete.
+  // When that history last finished updating (ready_at), why the latest refresh failed, if it did,
+  // and where an unfinished ads list carries on (next_token, from the list begun at scan_started_at).
+  // Without a ready history, search reports for the ad type can't count as complete.
   `CREATE TABLE IF NOT EXISTS ads_product_map_status (
     profile_id TEXT NOT NULL,
     ad_product TEXT NOT NULL,
     ready_at TEXT,
     error TEXT,
+    next_token TEXT,
+    scan_started_at TEXT,
     PRIMARY KEY (profile_id, ad_product)
   )`,
   // Which days have been stored, and when, so recent days can be refreshed.
@@ -104,10 +134,30 @@ export function getDb(env = process.env) {
 
 const migrated = new WeakSet();
 
-/** Creates any missing tables. */
+/** Creates any missing tables, and adds columns that later versions need. */
 export async function migrate(db) {
   if (!migrated.has(db)) {
     await db.batch(SCHEMA, "write");
+    // Search term rows stored before units were synced get the column, and their days are marked
+    // unsynced so the next sync fetches them again with units.
+    const columns = (await db.execute("PRAGMA table_info(ads_search_terms_daily)")).rows.map(r => r.name);
+    if (!columns.includes("units")) {
+      await db.batch([
+        "ALTER TABLE ads_search_terms_daily ADD COLUMN units INTEGER NOT NULL DEFAULT 0",
+        "DELETE FROM ads_synced_days WHERE ad_product IN ('SP_SEARCH', 'SB_SEARCH')",
+      ], "write");
+    }
+    // Product maps built before they had dates are dropped, and marked not ready, so the next sync
+    // builds the dated history instead.
+    const status = (await db.execute("PRAGMA table_info(ads_product_map_status)")).rows.map(r => r.name);
+    if (!status.includes("next_token")) {
+      await db.batch([
+        "ALTER TABLE ads_product_map_status ADD COLUMN next_token TEXT",
+        "ALTER TABLE ads_product_map_status ADD COLUMN scan_started_at TEXT",
+        "UPDATE ads_product_map_status SET ready_at = NULL",
+        "DROP TABLE IF EXISTS ads_search_product_map",
+      ], "write");
+    }
     migrated.add(db);
   }
   return db;

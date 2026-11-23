@@ -35,47 +35,99 @@ export const REPORTS = {
     adProduct: "SPONSORED_PRODUCTS",
     reportTypeId: "spSearchTerm",
     groupBy: ["searchTerm"],
-    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases7d", "sales7d"],
-    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases7d, sales: r.sales7d }),
+    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases7d", "unitsSoldClicks7d", "sales7d"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases7d, units: r.unitsSoldClicks7d, sales: r.sales7d }),
   },
   SB_SEARCH: {
     historyDays: 60,
     adProduct: "SPONSORED_BRANDS",
     reportTypeId: "sbSearchTerm",
     groupBy: ["searchTerm"],
-    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases", "sales"],
-    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases, sales: r.sales }),
+    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
   },
 };
 
 export const SEARCH_PRODUCTS = ["SP_SEARCH", "SB_SEARCH"];
 
+const SB_ADS = "application/vnd.sbadresource.v4+json";
+
 /**
- * Map Sponsored Brands ad groups to their advertised ASINs without changing any ads. The map is
- * replaced only after every page lists, so a failed refresh keeps the last usable one.
+ * Lists Sponsored Brands ads, without changing any, to record which ASINs each ad group advertised
+ * on which dates (ads_search_product_history). Each page is saved as it arrives, so a list still
+ * going at `deadline` stops (returning false) and the next call carries on from there. Returns
+ * true once the whole list has been read and the history updated.
  */
-export async function refreshSbProducts(db, ads, profileId, readyAt = new Date().toISOString()) {
-  const rows = [];
-  let nextToken;
+export async function refreshSbProducts(db, ads, profileId, { timeZone = "America/Los_Angeles", now = Date.now, deadline = Infinity } = {}) {
+  const saved = (await db.execute({ sql: "SELECT next_token, scan_started_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] })).rows[0];
+  let nextToken = saved?.next_token || null;
+  const startedAt = nextToken ? saved.scan_started_at : new Date(now()).toISOString();
+  if (!nextToken) await db.execute({ sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] });
   do {
+    if (now() >= deadline) return false;
     const { status, data } = await ads.request("POST", "/sb/v4/ads/list", {
       profileId,
-      body: { maxResults: 100, ...(nextToken ? { nextToken } : {}) },
-      contentType: "application/vnd.sbadresource.v4+json",
-      accept: "application/vnd.sbadresource.v4+json",
+      // Archived ads too: archiving one changes what its ad group advertises.
+      body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) },
+      contentType: SB_ADS,
+      accept: SB_ADS,
     });
-    if (status !== 200) throw new Error(`Sponsored Brands ad list failed: HTTP ${status}`);
-    for (const ad of data.ads || []) {
-      for (const asin of ad.creative?.asins || []) rows.push({ campaignId: String(ad.campaignId), adGroupId: String(ad.adGroupId), asin: String(asin) });
+    if (status !== 200) {
+      // A saved token may have expired, so the next call starts the list over rather than retry it.
+      if (nextToken && nextToken === saved?.next_token) await db.execute({ sql: "UPDATE ads_product_map_status SET next_token = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] });
+      throw new Error(`Sponsored Brands ad list failed: HTTP ${status}`);
     }
-    nextToken = data.nextToken;
+    nextToken = data.nextToken || null;
+    await db.batch([
+      ...(data.ads || []).map(ad => ({
+        sql: "INSERT OR REPLACE INTO ads_sb_ads_scan (profile_id, ad_id, campaign_id, ad_group_id, state, asins, created_ms, updated_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        args: [profileId, String(ad.adId), String(ad.campaignId), String(ad.adGroupId), String(ad.state || ""), (ad.creative?.asins || []).map(String).join(","), ad.extendedData?.creationDate ?? null, ad.extendedData?.lastUpdateDate ?? null],
+      })),
+      { sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, next_token, scan_started_at) VALUES (?, 'SB_SEARCH', ?, ?) ON CONFLICT (profile_id, ad_product) DO UPDATE SET next_token = excluded.next_token, scan_started_at = excluded.scan_started_at", args: [profileId, nextToken, startedAt] },
+    ], "write");
   } while (nextToken);
+
+  const startedMs = Date.parse(startedAt), dayOf = ms => todayIn(timeZone, ms);
+  // Ads can still change later on the day the list began, so it confirms them through the day before.
+  const through = addDays(dayOf(startedMs), -1);
+  const [listed, known] = await db.batch([
+    { sql: "SELECT * FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] },
+    { sql: "SELECT * FROM ads_search_product_history WHERE profile_id = ? AND ad_product = 'SB_SEARCH' ORDER BY valid_to", args: [profileId] },
+  ], "read");
+  const latest = new Map(known.rows.map(r => [`${r.campaign_id}|${r.ad_group_id}`, r]));
+  const groups = new Map();
+  for (const ad of listed.rows) {
+    const key = `${ad.campaign_id}|${ad.ad_group_id}`;
+    const g = groups.get(key) || { campaignId: ad.campaign_id, adGroupId: ad.ad_group_id, asins: new Set(), changed: 0, created: Infinity };
+    // Only enabled ads serve, but any ad's change can change what the group advertises. An ad
+    // without dates counts as changed when the list began.
+    if (ad.state === "ENABLED") for (const asin of String(ad.asins).split(",").filter(Boolean)) g.asins.add(asin);
+    g.changed = Math.max(g.changed, Number(ad.updated_ms) || startedMs);
+    g.created = Math.min(g.created, Number(ad.created_ms) || startedMs);
+    groups.set(key, g);
+  }
+  const stmts = [];
+  for (const [key, g] of groups) {
+    if (!g.asins.size) continue;
+    const asins = [...g.asins].sort().join(","), prev = latest.get(key);
+    if (prev && prev.asins === asins && g.changed < Date.parse(prev.observed_at)) {
+      // Unchanged since the list that last confirmed it.
+      stmts.push({ sql: "UPDATE ads_search_product_history SET valid_to = ?, observed_at = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND campaign_id = ? AND ad_group_id = ? AND valid_from = ?", args: [through, startedAt, profileId, g.campaignId, g.adGroupId, prev.valid_from] });
+      continue;
+    }
+    // The day of a change may mix products, unless it's the day the group's ads were all made.
+    const changedOn = dayOf(g.changed);
+    let start = changedOn === dayOf(g.created) ? changedOn : addDays(changedOn, 1);
+    if (prev && start <= prev.valid_to) start = addDays(prev.valid_to, 1);
+    if (start > through) continue;
+    stmts.push({ sql: "INSERT OR REPLACE INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) VALUES (?, 'SB_SEARCH', ?, ?, ?, ?, ?, ?)", args: [profileId, g.campaignId, g.adGroupId, asins, start, through, startedAt] });
+  }
   await db.batch([
-    { sql: "DELETE FROM ads_search_product_map WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
-    ...rows.map(r => ({ sql: "INSERT OR IGNORE INTO ads_search_product_map (profile_id, ad_product, campaign_id, ad_group_id, asin) VALUES (?, 'SB_SEARCH', ?, ?, ?)", args: [profileId, r.campaignId, r.adGroupId, r.asin] })),
-    { sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, ready_at, error) VALUES (?, 'SB_SEARCH', ?, NULL) ON CONFLICT (profile_id, ad_product) DO UPDATE SET ready_at = excluded.ready_at, error = NULL", args: [profileId, readyAt] },
+    ...stmts,
+    { sql: "UPDATE ads_product_map_status SET ready_at = ?, error = NULL, next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [new Date(now()).toISOString(), profileId] },
+    { sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] },
   ], "write");
-  return rows.length;
+  return true;
 }
 
 const FRESH_DAYS = 14; // Attribution can still change numbers this recent, so refresh them daily.
@@ -160,8 +212,8 @@ export async function storeWindow(db, { profileId, product, start, end, rows, sy
   for (const r of rows) {
     if (r.date < start || r.date > end) continue;
     stmts.push(search ? {
-      sql: "INSERT INTO ads_search_terms_daily (profile_id, ad_product, date, campaign_id, ad_group_id, search_term, impressions, clicks, cost, orders, sales) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.term, r.impressions, r.clicks, r.cost, r.orders, r.sales],
+      sql: "INSERT INTO ads_search_terms_daily (profile_id, ad_product, date, campaign_id, ad_group_id, search_term, impressions, clicks, cost, orders, units, sales) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.term, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales],
     } : {
       sql: "INSERT INTO ads_daily (profile_id, ad_product, date, campaign_id, ad_group_id, asin, impressions, clicks, cost, orders, units, sales) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.asin, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales],
@@ -182,18 +234,6 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   const started = now();
   const iso = () => new Date(now()).toISOString();
   const summary = { requested: 0, stored: 0, failed: 0, pending: 0, rows: 0, errors: [] };
-
-  if (products.includes("SB_SEARCH") && typeof ads.request === "function") {
-    try { await refreshSbProducts(db, ads, profileId, iso()); }
-    catch (err) {
-      summary.errors.push(`SB product map: ${err.message}`);
-      // Record why, but keep ready_at (and the map) from the last refresh that worked.
-      await db.execute({
-        sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, ready_at, error) VALUES (?, 'SB_SEARCH', NULL, ?) ON CONFLICT (profile_id, ad_product) DO UPDATE SET error = excluded.error",
-        args: [profileId, err.message],
-      });
-    }
-  }
 
   const pendingRequests = async () =>
     (await db.execute({ sql: "SELECT * FROM ads_report_requests WHERE profile_id = ? AND status IN ('PENDING', 'PROCESSING') ORDER BY requested_at", args: [profileId] })).rows;
@@ -264,6 +304,20 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
         });
       }
       summary.errors.push(`${product}: ${err.message}`);
+    }
+  }
+
+  // Once reports are collected and requested, listing Sponsored Brands ads may use up to half the
+  // budget; a longer list carries on in the next run.
+  if (products.includes("SB_SEARCH") && typeof ads.request === "function") {
+    try { await refreshSbProducts(db, ads, profileId, { timeZone, now, deadline: started + budgetMs / 2 }); }
+    catch (err) {
+      summary.errors.push(`SB product map: ${err.message}`);
+      // Record why, but keep ready_at (and the history) from the last refresh that worked.
+      await db.execute({
+        sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, ready_at, error) VALUES (?, 'SB_SEARCH', NULL, ?) ON CONFLICT (profile_id, ad_product) DO UPDATE SET error = excluded.error",
+        args: [profileId, err.message],
+      });
     }
   }
 

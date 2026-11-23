@@ -13,7 +13,7 @@ describe("refreshProducts", () => {
   it("stores titles and images for every ASIN the ads data mentions, with one read-only lookup", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SP", start: "2026-11-01", end: "2026-11-01", rows: [{ date: "2026-11-01", campaignId: "1", adGroupId: "2", asin: "B0AAAAAAAA", impressions: 1, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 }], syncedAt: "t" });
-    await db.execute({ sql: "INSERT INTO ads_search_product_map (profile_id, ad_product, campaign_id, ad_group_id, asin) VALUES (?, 'SB_SEARCH', '7', '8', 'B0BBBBBBBB')", args: [profileId] });
+    await db.execute({ sql: "INSERT INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) VALUES (?, 'SB_SEARCH', '7', '8', 'B0BBBBBBBB', '2026-10-01', '2026-11-21', 't')", args: [profileId] });
     const request = vi.fn(async () => ({ status: 200, data: { ProductMetadataList: [product("B0AAAAAAAA"), product("B0BBBBBBBB", { imageUrl: undefined })] } }));
     expect(await refreshProducts(db, { request }, profileId, "2026-11-22T00:00:00.000Z")).toBe(2);
     expect(request).toHaveBeenCalledWith("POST", "/product/metadata", expect.objectContaining({ profileId, body: expect.objectContaining({ asins: ["B0AAAAAAAA", "B0BBBBBBBB"] }) }));
@@ -26,7 +26,7 @@ describe("refreshProducts", () => {
 
   it("throws when the lookup fails, leaving stored products alone", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
-    await db.execute({ sql: "INSERT INTO ads_search_product_map (profile_id, ad_product, campaign_id, ad_group_id, asin) VALUES (?, 'SB_SEARCH', '7', '8', 'B0BBBBBBBB')", args: [profileId] });
+    await db.execute({ sql: "INSERT INTO ads_search_product_history (profile_id, ad_product, campaign_id, ad_group_id, asins, valid_from, valid_to, observed_at) VALUES (?, 'SB_SEARCH', '7', '8', 'B0BBBBBBBB', '2026-10-01', '2026-11-21', 't')", args: [profileId] });
     await db.execute({ sql: "INSERT INTO ads_products (profile_id, asin, title, image_url, updated_at) VALUES (?, 'B0BBBBBBBB', 'Kept', 'https://m.media-amazon.com/images/I/k.jpg', 't')", args: [profileId] });
     await expect(refreshProducts(db, { request: async () => ({ status: 500, data: {} }) }, profileId)).rejects.toThrow(/HTTP 500/);
     expect((await db.execute("SELECT title FROM ads_products")).rows[0].title).toBe("Kept");
@@ -92,6 +92,16 @@ describe("GET /api/ads/product-image", () => {
     expect((await productImage(signedIn("not-an-asin"))).status).toBe(404);
     expect((await productImage(signedIn("B0CCCCCCCC"))).status).toBe(404);
     expect(fetch).not.toHaveBeenCalled();
+    expect((await productImage(signedIn("B0AAAAAAAA"))).status).toBe(502);
+  });
+
+  it("doesn't follow a redirect away from the checked Amazon URL", async () => {
+    env();
+    // Like fetch: follows the redirect unless told not to.
+    const fetch = vi.fn(async (url, init = {}) => init.redirect === "manual"
+      ? new Response(null, { status: 302, headers: { Location: "https://evil.example/x.jpg" } })
+      : new Response(new Uint8Array([9]), { headers: { "Content-Type": "image/jpeg" } }));
+    vi.stubGlobal("fetch", fetch);
     expect((await productImage(signedIn("B0AAAAAAAA"))).status).toBe(502);
   });
 });

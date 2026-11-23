@@ -44,23 +44,89 @@ describe("Search Terms with 0 Sales card", () => {
     expect(fetch.mock.calls.some(([url]) => String(url).includes("page=1"))).toBe(true);
   });
 
-  it("opens the reference filter settings and applies edited spend/order limits", async () => {
+  it("makes every setting editable and saves them to the account", async () => {
+    stubNavigation();
+    let saved = null;
+    const fetch = vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") saved = JSON.parse(init.body);
+      const body = init.method === "PUT" ? { settings: saved } : { ...response(0), ...(saved ? { settings: saved } : {}) };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetch);
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    document.querySelector("[data-edit=st0]").click();
+    const dialog = document.querySelector(".modal-wrap");
+    const field = sel => dialog.querySelector(sel);
+    // Everything is editable except Break even bid, which needs product costs.
+    const disabled = [...dialog.querySelectorAll("input, select")].filter(i => i.disabled);
+    expect(disabled.map(i => i.dataset.min || i.dataset.max || i.dataset.track)).toEqual(["breakEvenBid", "breakEvenBid", "breakEvenBid"]);
+    expect([field("[data-z=name]").value, field("[data-z=sort]").value, field("[data-min=spend]").value, field("[data-max=orders]").value]).toEqual(["Search Terms with 0 Sales", "spend:desc", "10", "0"]);
+    expect([field("[data-z=showTracked]").checked, field("[data-z=hideAsins]").checked, field("[data-z=hideKeywords]").checked]).toEqual([true, true, false]);
+    expect(field("[data-z=sort]").textContent).toContain("Cost in Descending Order");
+    field("[data-z=name]").value = "Wasted search terms";
+    field("[data-z=description]").value = "Negate these.";
+    field("[data-z=hideKeywords]").checked = true;
+    field("[data-z=sort]").value = "clicks:asc";
+    field("[data-min=clicks]").value = "5";
+    field("[data-track=orders]").checked = true;
+    field("[data-track=pl]").checked = false;
+    field("[data-ok]").click();
+    await vi.waitFor(() => expect(saved).not.toBeNull());
+    expect(saved).toEqual({
+      name: "Wasted search terms", description: "Negate these.", showTracked: true, hideAsins: true, hideKeywords: true, sort: "clicks", dir: "asc",
+      filters: { clicks: { min: 5 }, orders: { max: 0 }, spend: { min: 10 } }, track: ["impressions", "clicks", "orders"],
+    });
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Wasted search terms"));
+    expect(document.querySelector(".modal-wrap")).toBeNull();
+    expect(document.querySelector("[data-zero-card] footer").textContent).toBe("Negate these.");
+    expect([...document.querySelectorAll("[data-zero-card] thead th")].map(th => th.textContent.replace(/[↓↑]/g, "").trim())).toEqual(["Product", "Sponsored", "Search term", "Impressions", "Clicks", "Orders"]);
+  });
+
+  it("refuses a min above its max and keeps the dialog open", async () => {
     stubNavigation();
     const fetch = vi.fn(async () => new Response(JSON.stringify(response(0)), { status: 200, headers: { "Content-Type": "application/json" } }));
     vi.stubGlobal("fetch", fetch);
     openApp("/Ads");
-    await vi.waitFor(() => expect(document.querySelector("[data-zero-card]")).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
     document.querySelector("[data-edit=st0]").click();
-    const dialog = document.querySelector(".modal-wrap");
-    expect(dialog.textContent).toContain("Search Terms with 0 Sales");
-    expect(dialog.textContent).toContain("Cost in Descending Order");
-    expect(dialog.querySelector("[data-zero-spend]").value).toBe("10.00");
-    expect(dialog.querySelector("[data-zero-orders]").value).toBe("0");
-    expect(dialog.querySelector("[data-zero-asins]").checked).toBe(true);
-    dialog.querySelector("[data-zero-spend]").value = "15";
-    dialog.querySelector("[data-zero-orders]").value = "1";
-    dialog.querySelector("[data-ok]").click();
-    await vi.waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes("minSpend=15") && String(url).includes("maxOrders=1"))).toBe(true));
+    document.querySelector(".modal-wrap [data-min=impressions]").value = "50";
+    document.querySelector(".modal-wrap [data-max=impressions]").value = "10";
+    document.querySelector(".modal-wrap [data-ok]").click();
+    expect(document.querySelector(".modal-wrap")).not.toBeNull();
+    expect(document.querySelector("#toast").textContent).toBe("The min for Impressions is above its max.");
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
+  it("shows only the tracked columns, or none when tracked columns are turned off", async () => {
+    stubNavigation();
+    const settings = { name: "Mine", description: "", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: {}, track: ["orders", "spend", "roas"] };
+    const rows = [{ term: "jump rope", sponsored: "Products", impressions: 10, clicks: 2, orders: 1, units: 1, spend: 4.5, sales: 9, roas: 2, pl: null }];
+    let show = true;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...response(0), rows, total: 1, totals: { orders: 1, spend: 4.5, roas: 2 }, settings: { ...settings, showTracked: show } }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const heads = () => [...document.querySelectorAll("[data-zero-card] thead th")].map(th => th.textContent.replace(/[↓↑]/g, "").trim());
+    expect(heads()).toEqual(["Product", "Sponsored", "Search term", "Orders", "ROAS", "Spend"]);
+    expect(document.querySelector("[data-zero-card] tbody tr").textContent).toContain("$4.50");
+    expect(document.querySelector("[data-zero-card] tbody tr").textContent).toContain("2.00");
+    show = false;
+    document.querySelector("[data-apply]").click();
+    await vi.waitFor(() => expect(heads()).toEqual(["Product", "Sponsored", "Search term"]));
+  });
+
+  it("applies settings to sample data without saving anything", async () => {
+    stubNavigation();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    openApp("/Ads", { env: "preview", realData: false });
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    expect(document.querySelectorAll("[data-zero-card] tbody tr:not(.sumrow)")).toHaveLength(6);
+    document.querySelector("[data-edit=st0]").click();
+    document.querySelector(".modal-wrap [data-z=hideKeywords]").checked = true;
+    document.querySelector(".modal-wrap [data-ok]").click();
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tr.empty")).not.toBeNull());
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("keeps the latest request's results when an older response arrives last", async () => {
@@ -154,6 +220,20 @@ describe("Search Terms with 0 Sales card", () => {
     const status = document.querySelector("[data-zero-status]");
     expect(status.textContent).toContain("Amazon only keeps recent search terms: Sponsored Products from 24 Aug 26, Sponsored Brands from 23 Sep 26.");
     expect(status.textContent).toContain("Amazon hasn't reported search terms after 21 Nov 26 yet.");
+    expect(status.querySelector("[data-zero-sync]")).toBeNull();
+  });
+
+  it("says how much spend is left out because its product can't be confirmed", async () => {
+    stubNavigation();
+    const body = { ...response(0), coverage: {
+      SP_SEARCH: { days: 30, expectedDays: 30, unattributedSpend: 0 },
+      SB_SEARCH: { days: 30, expectedDays: 30, mapReady: true, unattributedSpend: 45.5 },
+    } };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-status]")).not.toBeNull());
+    const status = document.querySelector("[data-zero-status]");
+    expect(status.textContent).toBe("$45.50 of Sponsored Brands spend can't be matched to one product on its dates, so its search terms are left out.");
     expect(status.querySelector("[data-zero-sync]")).toBeNull();
   });
 });

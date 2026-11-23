@@ -1,26 +1,46 @@
 import { migrate } from "../db.js";
 import { addDays } from "../http.js";
+import { ZERO_DEFAULTS } from "./insight-settings.js";
 import { REPORTS } from "./sync.js";
 
 const cents = value => Math.round(Number(value || 0) * 100) / 100;
 const asinPattern = /^B0[A-Z0-9]{8}$/i;
 const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
 
+/** Every metric the card can filter, sort or show, from summed counts. Null means unknown. */
+function metrics(r) {
+  const ratio = (a, b, k = 1) => (b ? (a / b) * k : null);
+  return {
+    impressions: r.impressions, clicks: r.clicks, orders: r.orders, units: r.units, spend: cents(r.cost), sales: cents(r.sales),
+    cpc: ratio(r.cost, r.clicks), ctr: ratio(r.clicks, r.impressions, 100), conversion: ratio(r.orders, r.clicks, 100),
+    acos: ratio(r.cost, r.sales, 100), roas: ratio(r.sales, r.cost),
+    // Without product costs, P&L is only known when nothing sold: the spend, lost. Sponsored Brands
+    // spend isn't tied to one product's profit, so it stays blank, as in the source report.
+    pl: r.adProduct === "SP_SEARCH" && r.orders === 0 ? cents(-r.cost) : null,
+    breakEvenBid: null,
+  };
+}
+
+const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f.min) && (f.max == null || v - 0.000001 <= f.max);
+
 /**
- * One search term per ad type/campaign/ad group, aggregated across the chosen dates. `today`
- * (the profile's date) marks which of those dates Amazon can provide: from `historyDays` back,
- * through yesterday.
+ * One search term per ad type/product, aggregated across the chosen dates, filtered, sorted and
+ * paged by the card's `settings`. `today` (the profile's date) marks which of those dates Amazon
+ * can provide: from `historyDays` back, through yesterday.
  */
-export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize = 7, minSpend = 10, maxOrders = 0, hideAsins = true }) {
+export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize = 7, settings = ZERO_DEFAULTS }) {
   await migrate(db);
   const results = await db.batch([
     {
-      sql: `SELECT ad_product, campaign_id, ad_group_id, search_term,
-                   SUM(impressions) AS impressions, SUM(clicks) AS clicks,
-                   SUM(cost) AS cost, SUM(orders) AS orders, SUM(sales) AS sales
-            FROM ads_search_terms_daily
-            WHERE profile_id = ? AND date BETWEEN ? AND ?
-            GROUP BY ad_product, campaign_id, ad_group_id, search_term`,
+      // Sponsored Brands days take the ASINs their ad group is known to have advertised that day.
+      sql: `SELECT t.ad_product, t.campaign_id, t.ad_group_id, t.search_term, h.asins,
+                   SUM(t.impressions) AS impressions, SUM(t.clicks) AS clicks,
+                   SUM(t.cost) AS cost, SUM(t.orders) AS orders, SUM(t.units) AS units, SUM(t.sales) AS sales
+            FROM ads_search_terms_daily t
+            LEFT JOIN ads_search_product_history h ON h.profile_id = t.profile_id AND h.ad_product = t.ad_product
+              AND h.campaign_id = t.campaign_id AND h.ad_group_id = t.ad_group_id AND t.date BETWEEN h.valid_from AND h.valid_to
+            WHERE t.profile_id = ? AND t.date BETWEEN ? AND ?
+            GROUP BY t.ad_product, t.campaign_id, t.ad_group_id, t.search_term, h.asins`,
       args: [profileId, from, to],
     },
     {
@@ -29,50 +49,55 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     },
     { sql: "SELECT ad_product FROM ads_report_requests WHERE profile_id = ? AND ad_product IN ('SP_SEARCH', 'SB_SEARCH') AND status IN ('PENDING', 'PROCESSING') GROUP BY ad_product", args: [profileId] },
     { sql: "SELECT campaign_id, ad_group_id, COUNT(DISTINCT asin) AS products, MIN(asin) AS asin FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
-    { sql: "SELECT campaign_id, ad_group_id, COUNT(DISTINCT asin) AS products, MIN(asin) AS asin FROM ads_search_product_map WHERE profile_id = ? AND ad_product = 'SB_SEARCH' GROUP BY campaign_id, ad_group_id", args: [profileId] },
     { sql: "SELECT ready_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
   ], "read");
-  const [raw, synced, pending, spProducts, sbProducts, sbMap, productRows] = results;
+  const [raw, synced, pending, spProducts, sbMap, productRows] = results;
   const products = new Map(productRows.rows.map(r => [String(r.asin), r]));
-  const map = new Map();
-  for (const [product, result] of [["SP_SEARCH", spProducts], ["SB_SEARCH", sbProducts]]) {
-    for (const r of result.rows) if (Number(r.products) === 1) map.set(`${product}|${r.campaign_id}|${r.ad_group_id}`, r.asin);
-  }
-  const grouped = new Map();
+  const spAsins = new Map();
+  for (const r of spProducts.rows) if (Number(r.products) === 1) spAsins.set(`${r.campaign_id}|${r.ad_group_id}`, r.asin);
+  const grouped = new Map(), unattributed = { SP_SEARCH: 0, SB_SEARCH: 0 };
   for (const r of raw.rows) {
-    // A search report has no advertised ASIN. Ambiguous ad groups cannot be assigned to a
-    // product honestly, so leave them out of this product-level insight.
-    const asin = map.get(`${r.ad_product}|${r.campaign_id}|${r.ad_group_id}`);
-    if (!asin) continue;
+    // A search report has no advertised ASIN: Sponsored Products ad groups are matched through the
+    // ads they reported in these dates, Sponsored Brands ones through what they advertised each day.
+    // Rows without exactly one known product can't be assigned honestly, so they're left out of
+    // this product-level insight and their spend is reported instead.
+    const sb = r.ad_product === "SB_SEARCH";
+    const asin = sb ? (r.asins && !String(r.asins).includes(",") ? String(r.asins) : null) : spAsins.get(`${r.campaign_id}|${r.ad_group_id}`);
+    if (!asin) {
+      unattributed[r.ad_product] += Number(r.cost);
+      continue;
+    }
     const key = `${r.ad_product}|${asin}|${r.search_term}`;
-    const row = grouped.get(key) || { adProduct: r.ad_product, asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, sales: 0 };
-    row.impressions += Number(r.impressions);
-    row.clicks += Number(r.clicks);
-    row.cost += Number(r.cost);
-    row.orders += Number(r.orders);
-    row.sales += Number(r.sales);
+    const row = grouped.get(key) || { adProduct: r.ad_product, asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
+    for (const k of ["impressions", "clicks", "cost", "orders", "units", "sales"]) row[k] += Number(r[k]);
     grouped.set(key, row);
   }
-  const all = [...grouped.values()].map(r => ({ ...r, cost: cents(r.cost), sales: cents(r.sales) }));
-  const matched = all.filter(r => r.orders <= maxOrders && r.cost + 0.000001 >= minSpend && (!hideAsins || !asinPattern.test(r.term)));
-  matched.sort((a, b) => b.cost - a.cost || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || a.asin.localeCompare(b.asin));
+  const all = [...grouped.values()].map(r => ({ adProduct: r.adProduct, asin: r.asin, term: r.term, counts: r, ...metrics(r) }));
+  const matched = all.filter(r => Object.entries(settings.filters).every(([k, f]) => within(r[k], f))
+    && !(settings.hideAsins && asinPattern.test(r.term)) && !(settings.hideKeywords && !asinPattern.test(r.term)));
+  // Unknown values sort last either way.
+  const sign = settings.dir === "asc" ? 1 : -1;
+  const byMetric = (a, b) => {
+    const x = a[settings.sort], y = b[settings.sort];
+    return x == null || y == null ? (x == null) - (y == null) : (x - y) * sign;
+  };
+  matched.sort((a, b) => byMetric(a, b) || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || a.asin.localeCompare(b.asin));
   const total = matched.length;
   const shown = matched.slice(page * pageSize, (page + 1) * pageSize);
   // Images are served by /api/ads/product-image, which fetches them from Amazon on the server.
   const rows = shown.map(r => {
     const product = products.get(r.asin);
-    return {
-      ...r, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", pl: r.adProduct === "SP_SEARCH" ? cents(-r.cost) : null,
-      title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(r.asin)}` : null,
-    };
+    // counts stays server-side; an undefined property is left out of the JSON.
+    return { ...r, counts: undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(r.asin)}` : null };
   });
-  // The source table's footer totals the current page, including rows outside a screenshot crop.
-  const totals = shown.reduce((s, r) => ({ impressions: s.impressions + r.impressions, clicks: s.clicks + r.clicks, pl: s.pl - (r.adProduct === "SP_SEARCH" ? r.cost : 0) }), { impressions: 0, clicks: 0, pl: 0 });
-  totals.pl = cents(totals.pl);
+  // The source table's footer totals the current page; its ratios come from the page's sums.
+  const sum = { impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
+  for (const r of shown) for (const k of Object.keys(sum)) sum[k] += r.counts[k];
+  const totals = { ...metrics(sum), pl: cents(shown.reduce((n, r) => n + (r.pl || 0), 0)) };
   const waiting = new Set(pending.rows.map(r => r.ad_product));
-  // Sponsored Brands rows need the ad group -> ASIN map; until one has been built they are all
-  // left out, so that coverage isn't complete however many days have synced.
+  // Sponsored Brands rows need the ad group -> ASIN history; until an ads list has finished they
+  // are all left out, so that coverage isn't complete however many days have synced.
   const sbMapReady = Boolean(sbMap.rows[0]?.ready_at);
   const coverage = {};
   for (const k of ["SP_SEARCH", "SB_SEARCH"]) {
@@ -81,7 +106,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     const reportedThrough = today ? addDays(today, -1) : to;
     const start = from > availableFrom ? from : availableFrom, end = to < reportedThrough ? to : reportedThrough;
     const days = synced.rows.filter(r => r.ad_product === k && r.date >= start && r.date <= end).length;
-    coverage[k] = { days, expectedDays: dayCount(start, end), pending: waiting.has(k), availableFrom, reportedThrough, ...(k === "SB_SEARCH" ? { mapReady: sbMapReady } : {}) };
+    coverage[k] = { days, expectedDays: dayCount(start, end), pending: waiting.has(k), availableFrom, reportedThrough, unattributedSpend: cents(unattributed[k]), ...(k === "SB_SEARCH" ? { mapReady: sbMapReady } : {}) };
   }
-  return { from, to, page, pageSize, total, totals, rows, coverage };
+  return { from, to, page, pageSize, total, totals, rows, coverage, settings };
 }
