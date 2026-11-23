@@ -287,14 +287,17 @@
   }
   function liveTrend(st, data, adProduct) {
     const ranges = syncedRanges(data), cols = [];
+    // The combined table sums only the ad types it covers, so a refused type's older rows stay out.
+    const needed = neededTypes(data, ranges);
+    const days = adProduct === "ALL" ? data.days.filter(d => needed.includes(d.adProduct)) : data.days;
     for (let i = st.cols - 1; i >= 0; i--) {
       const end = SP.addDays(st.last, -i * st.days), start = SP.addDays(end, -st.days + 1), from = SP.iso(start), to = SP.iso(end);
       // A column reaching past the dates we have data for is unknown, not zero.
       const known = columnKnown(data, ranges, adProduct, from, to);
-      cols.push({ start, end, from, to, p: known ? SP.adTotals(data.days, adProduct, from, to) : null });
+      cols.push({ start, end, from, to, p: known ? SP.adTotals(days, adProduct, from, to) : null });
     }
     const shown = cols.filter(c => c.p);
-    const sum = shown.length ? SP.adTotals(data.days.filter(d => shown.some(c => d.date >= c.from && d.date <= c.to)), adProduct, "", "9999-12-31") : null;
+    const sum = shown.length ? SP.adTotals(days.filter(d => shown.some(c => d.date >= c.from && d.date <= c.to)), adProduct, "", "9999-12-31") : null;
     return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum ? sum[key] : null, values: cols.map(c => (c.p ? c.p[key] : null)) })) });
   }
   // A sync summary as one message: failures first, then reports still being prepared.

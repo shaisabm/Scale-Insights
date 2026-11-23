@@ -1,5 +1,5 @@
 import { createClient } from "@libsql/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { storeWindow } from "../../server/ads/sync.js";
 import { adsTrend } from "../../server/ads/trend.js";
 import { migrate } from "../../server/db.js";
@@ -29,5 +29,15 @@ describe("adsTrend", () => {
     expect(adTypes).toEqual({ SP: { state: "ok" }, SB: { state: "pending" }, SD: { state: "unsupported" } });
     const other = await adsTrend(d, { profileId: "999", from: "2026-11-01", to: "2026-11-30" });
     expect(other.adTypes).toEqual({ SP: { state: "missing" }, SB: { state: "missing" }, SD: { state: "missing" } });
+  });
+
+  it("reads totals and sync info in one read transaction, so they can't disagree", async () => {
+    const d = await db();
+    const batch = vi.spyOn(d, "batch");
+    const execute = vi.spyOn(d, "execute");
+    await adsTrend(d, { profileId: PROFILE, from: "2026-11-01", to: "2026-11-30" });
+    expect(execute).not.toHaveBeenCalled();
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][1]).toBe("read");
   });
 });

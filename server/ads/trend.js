@@ -12,16 +12,23 @@ const money = v => Math.round(Number(v) * 100) / 100;
  */
 export async function adsTrend(db, { profileId, from, to }) {
   await migrate(db);
-  const days = await db.execute({
-    sql: `SELECT ad_product, date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(cost) AS cost,
-            SUM(orders) AS orders, SUM(units) AS units, SUM(sales) AS sales
-          FROM ads_daily WHERE profile_id = ? AND date BETWEEN ? AND ?
-          GROUP BY ad_product, date ORDER BY date, ad_product`,
-    args: [profileId, from, to],
-  });
-  const stored = await db.execute({ sql: "SELECT ad_product, date, synced_at FROM ads_synced_days WHERE profile_id = ? ORDER BY ad_product, date", args: [profileId] });
-  const pending = await db.execute({ sql: "SELECT DISTINCT ad_product FROM ads_report_requests WHERE profile_id = ? AND status IN ('PENDING', 'PROCESSING')", args: [profileId] });
-  const refused = await db.execute({ sql: "SELECT ad_product FROM ads_unsupported WHERE profile_id = ?", args: [profileId] });
+  // One read-only transaction, so the totals and the sync info come from the same moment even if
+  // a sync stores a window in between.
+  const [days, stored, pending, refused] = await db.batch(
+    [
+      {
+        sql: `SELECT ad_product, date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(cost) AS cost,
+                SUM(orders) AS orders, SUM(units) AS units, SUM(sales) AS sales
+              FROM ads_daily WHERE profile_id = ? AND date BETWEEN ? AND ?
+              GROUP BY ad_product, date ORDER BY date, ad_product`,
+        args: [profileId, from, to],
+      },
+      { sql: "SELECT ad_product, date, synced_at FROM ads_synced_days WHERE profile_id = ? ORDER BY ad_product, date", args: [profileId] },
+      { sql: "SELECT DISTINCT ad_product FROM ads_report_requests WHERE profile_id = ? AND status IN ('PENDING', 'PROCESSING')", args: [profileId] },
+      { sql: "SELECT ad_product FROM ads_unsupported WHERE profile_id = ?", args: [profileId] },
+    ],
+    "read",
+  );
 
   const synced = {};
   for (const r of stored.rows) {

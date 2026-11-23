@@ -184,4 +184,16 @@ describe("Advertising trend page", () => {
     expect(rowValues(document.querySelector("table.trend"), "ppcSales")[0]).toBe("$2,240.00");
     expect(document.querySelector("#adt").textContent).toContain("Sponsored Display isn't included");
   });
+
+  it("leaves a refused ad type's stored rows out of the combined totals only", async () => {
+    // Sponsored Display has rows from before Amazon started refusing it.
+    await openTrend(SP => [...lastDays(SP, 56).map(d => day("SP", d)), ...lastDays(SP, 56).map(d => day("SD", d, 2))], {
+      adTypes: { SP: { state: "ok" }, SB: { state: "ok" }, SD: { state: "unsupported" } },
+    });
+    const tables = [...document.querySelectorAll("table.trend")];
+    const headings = [...document.querySelectorAll("#adt h4")].map(h => h.textContent);
+    expect(rowValues(tables[0], "ppcSales")).toEqual(["$2,240.00", ...Array(8).fill("$280.00")]);
+    const sd = tables[headings.indexOf("Advertising trend for Sponsored Display")];
+    expect(rowValues(sd, "ppcSales")[0]).toBe("$4,480.00");
+  });
 });
