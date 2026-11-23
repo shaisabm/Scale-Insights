@@ -396,15 +396,17 @@
       };
       const f = v => (v == null ? '<span title="No data for these dates">—</span>' : r.fmt ? r.fmt(v) : SP.int(v));
       const neg = v => (r.negRed && v < 0 ? " neg" : "");
-      const spark = cfg.analysis ? `<td class="c">${sparkBars(vals)}</td>` : "";
+      const spark = cfg.analysis ? `<td class="c">${sparkBars(vals, cfg.analysis)}</td>` : "";
       const cl = r.hl ? (v => (v >= (r.hl) ? ' style="background:#f6ee3f"' : "")) : (() => "");
       return `<tr data-metric="${r.key || r.label}"><th class="l rowlab">${r.link ? `<a href="#" class="plusl">${SP.svg(I.plus, "pl")}${r.label}</a>` : r.label}${r.info ? `<span class="i" title="${SP.esc(r.info)}">${SP.svg(I.info)}</span>` : ""}</th>${cfg.noSummary ? "" : `<td class="sumcol r${neg(r.summary)}">${f(r.summary)}</td>`}${vals.map(v => `<td class="r heat${neg(v)}" data-h="${lvl(v)}"${cl(v)}>${f(v)}</td>`).join("")}${spark}</tr>`;
     }).join("");
     return `<div class="trend-wrap"><table class="trend ${cfg.heatOn === false ? "noheat" : ""}" id="${cfg.id || ""}"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   };
-  function sparkBars(vals) {
-    const w = 46, h = 26, n = vals.length, m = Math.max(...vals.map(Math.abs)) || 1, bw = w / n - 1.5;
+  function sparkBars(vals, size) {
+    const { width: w = 46, height: h = 26 } = typeof size === "object" ? size : {};
+    const n = vals.length, m = Math.max(0, ...vals.filter(v => v != null).map(Math.abs)) || 1, bw = w / Math.max(n, 1) - 1.5;
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${vals.map((v, i) => {
+      if (v == null) return "";
       const bh = Math.max(1, (Math.abs(v) / m) * (h - 4));
       return `<rect x="${i * (bw + 1.5)}" y="${v < 0 ? 2 : h - bh}" width="${bw}" height="${bh}" fill="${v < 0 ? "#f3a3a3" : "#9fb0c8"}" stroke="none"/>`;
     }).join("")}<line x1="0" x2="${w}" y1="${h - 0.5}" y2="${h - 0.5}" stroke="#ccc" stroke-width=".5"/></svg>`;

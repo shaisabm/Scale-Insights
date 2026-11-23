@@ -298,7 +298,7 @@
     }
     const shown = cols.filter(c => c.p);
     const sum = shown.length ? SP.adTotals(days.filter(d => shown.some(c => d.date >= c.from && d.date <= c.to)), adProduct, "", "9999-12-31") : null;
-    return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum ? sum[key] : null, values: cols.map(c => (c.p ? c.p[key] : null)) })) });
+    return SP.trend({ corner: "Metrics", analysis: { width: 104, height: 36 }, heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum ? sum[key] : null, values: cols.map(c => (c.p ? c.p[key] : null)) })) });
   }
   // A sync summary as one message: failures first, then reports still being prepared.
   const syncMessage = s => {

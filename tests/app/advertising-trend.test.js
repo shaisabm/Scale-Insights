@@ -28,7 +28,7 @@ async function openTrend(days, { cover = SP => ({ SP: covered(SP), SB: covered(S
   return fetch;
 }
 
-const rowValues = (table, metric) => [...table.querySelectorAll(`tr[data-metric="${metric}"] td`)].map(td => td.textContent.trim());
+const rowValues = (table, metric) => [...table.querySelectorAll(`tr[data-metric="${metric}"] td.sumcol, tr[data-metric="${metric}"] td.heat`)].map(td => td.textContent.trim());
 
 describe("SP.adTotals", () => {
   it("sums one ad product between two dates and works out the ratios", () => {
@@ -57,6 +57,17 @@ describe("SP.adTotals", () => {
 });
 
 describe("Advertising trend page", () => {
+  it("shows an Analysis bar for each known period in every metric row", async () => {
+    await openTrend(SP => lastDays(SP, 56).map(d => day("SP", d)));
+    for (const table of document.querySelectorAll("table.trend")) {
+      expect(table.querySelector("thead th:last-child").textContent).toBe("Analysis");
+      expect(table.querySelectorAll("tbody tr[data-metric] td:last-child svg.spark")).toHaveLength(12);
+      const chart = table.querySelector('tr[data-metric="ppcSales"] svg.spark');
+      expect(chart.getAttribute("width")).toBe("104");
+      expect(chart.querySelectorAll("rect")).toHaveLength(8);
+    }
+  });
+
   it("draws all campaign types first, then each ad type, from the API data", async () => {
     await openTrend(SP => [...lastDays(SP, 56).map(d => day("SP", d)), day("SB", SP.iso(SP.lastDate), 2)]);
     const [all, sp, sb] = document.querySelectorAll("table.trend");
@@ -109,7 +120,7 @@ describe("Advertising trend page", () => {
     expect(rowValues(document.querySelector("table.trend"), "ppcSales")).toHaveLength(3);
     const weekEarlier = SP.addDays(SP.lastDate, -7);
     change("last", SP.iso(weekEarlier));
-    expect(document.querySelector("table.trend thead th.dh:last-child").textContent).toContain(SP.dd(weekEarlier));
+    expect([...document.querySelectorAll("table.trend thead th.dh")].at(-1).textContent).toContain(SP.dd(weekEarlier));
     change("days", "1");
     expect(rowValues(document.querySelector("table.trend"), "ppcSales")).toEqual(["$80.00", "$40.00", "$40.00"]);
   });
@@ -151,6 +162,7 @@ describe("Advertising trend page", () => {
     const SP = window.SP;
     const sales = () => rowValues(document.querySelector("table.trend"), "ppcSales");
     expect(sales()).toEqual(["$840.00", ...Array(5).fill("—"), "$280.00", "$280.00", "$280.00"]);
+    expect(document.querySelector('table.trend tr[data-metric="ppcSales"] svg.spark').querySelectorAll("rect")).toHaveLength(3);
     const last = document.querySelector("[data-k=last]");
     last.value = SP.iso(SP.addDays(SP.lastDate, 7));
     last.dispatchEvent(new Event("change", { bubbles: true }));
@@ -172,6 +184,7 @@ describe("Advertising trend page", () => {
     });
     const [all, sp] = document.querySelectorAll("table.trend");
     expect(rowValues(all, "ppcSales")).toEqual(Array(9).fill("—"));
+    expect(all.querySelector('tr[data-metric="ppcSales"] svg.spark').querySelectorAll("rect")).toHaveLength(0);
     expect(rowValues(sp, "ppcSales")[0]).toBe("$2,240.00");
     expect(document.querySelector("#adt").textContent).toContain("Sponsored Brands hasn't finished syncing");
   });
