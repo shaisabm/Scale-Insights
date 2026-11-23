@@ -10,14 +10,16 @@ function lastDays(SP, count) {
 }
 
 // Synced range ending on SP.lastDate and going `back` days, as /api/ads/trend reports it.
-const covered = (SP, back = 89) => ({ first: SP.iso(SP.addDays(SP.lastDate, -back)), last: SP.iso(SP.lastDate), syncedAt: "2026-11-22T14:00:00.000Z" });
+const covered = (SP, back = 89) => ({ first: SP.iso(SP.addDays(SP.lastDate, -back)), last: SP.iso(SP.lastDate), syncedAt: "2026-11-22T14:00:00.000Z", ranges: [[SP.iso(SP.addDays(SP.lastDate, -back)), SP.iso(SP.lastDate)]] });
+// Synced ranges given as [daysBack, daysBack] pairs relative to SP.lastDate.
+const coveredRanges = (SP, pairs) => ({ ...covered(SP), ranges: pairs.map(([from, to]) => [SP.iso(SP.addDays(SP.lastDate, -from)), SP.iso(SP.addDays(SP.lastDate, -to))]) });
 
-async function openTrend(days, { cover = SP => ({ SP: covered(SP), SB: covered(SP), SD: covered(SP) }), sync = { requested: 1, stored: 1, failed: 0, pending: 0, rows: 5, errors: [] } } = {}) {
+async function openTrend(days, { cover = SP => ({ SP: covered(SP), SB: covered(SP), SD: covered(SP) }), adTypes, sync = { requested: 1, stored: 1, failed: 0, pending: 0, rows: 5, errors: [] } } = {}) {
   stubNavigation();
   const fetch = stubFetch({
     "GET /api/ads/trend": () => {
       const SP = window.SP;
-      return { from: SP.iso(SP.addDays(SP.lastDate, -119)), to: SP.iso(SP.lastDate), days: days(SP), synced: cover(SP) };
+      return { from: SP.iso(SP.addDays(SP.lastDate, -119)), to: SP.iso(SP.lastDate), days: days(SP), synced: cover(SP), ...(adTypes ? { adTypes } : {}) };
     },
     "POST /api/sync/ads": sync,
   });
@@ -154,5 +156,32 @@ describe("Advertising trend page", () => {
     last.dispatchEvent(new Event("change", { bubbles: true }));
     // The week after the last synced day is unknown too; the summary only counts known weeks.
     expect(sales()).toEqual(["$840.00", ...Array(4).fill("—"), "$280.00", "$280.00", "$280.00", "—"]);
+  });
+
+  it("keeps a gap inside the synced range unavailable", async () => {
+    // Synced: 55 to 28 days back and the last 13 days; 27 to 14 days back is still missing.
+    const cover = SP => ({ SP: coveredRanges(SP, [[55, 28], [13, 0]]) });
+    await openTrend(SP => lastDays(SP, 56).map(d => day("SP", d)), { cover });
+    expect(rowValues(document.querySelector("table.trend"), "ppcSales")).toEqual(["$1,680.00", ...Array(4).fill("$280.00"), "—", "—", "$280.00", "$280.00"]);
+  });
+
+  it("leaves the combined totals unavailable while an ad type hasn't synced", async () => {
+    await openTrend(SP => lastDays(SP, 56).map(d => day("SP", d)), {
+      cover: SP => ({ SP: covered(SP), SD: covered(SP) }),
+      adTypes: { SP: { state: "ok" }, SB: { state: "pending" }, SD: { state: "ok" } },
+    });
+    const [all, sp] = document.querySelectorAll("table.trend");
+    expect(rowValues(all, "ppcSales")).toEqual(Array(9).fill("—"));
+    expect(rowValues(sp, "ppcSales")[0]).toBe("$2,240.00");
+    expect(document.querySelector("#adt").textContent).toContain("Sponsored Brands hasn't finished syncing");
+  });
+
+  it("leaves out an ad type Amazon doesn't offer the account, and says so", async () => {
+    await openTrend(SP => lastDays(SP, 56).map(d => day("SP", d)), {
+      cover: SP => ({ SP: covered(SP), SB: covered(SP) }),
+      adTypes: { SP: { state: "ok" }, SB: { state: "ok" }, SD: { state: "unsupported" } },
+    });
+    expect(rowValues(document.querySelector("table.trend"), "ppcSales")[0]).toBe("$2,240.00");
+    expect(document.querySelector("#adt").textContent).toContain("Sponsored Display isn't included");
   });
 });

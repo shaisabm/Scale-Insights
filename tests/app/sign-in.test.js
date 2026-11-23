@@ -14,7 +14,7 @@ describe("sign-in page", () => {
     openApp("/Identity/Login?next=%2FAds%2FAdvertisingTrend");
     expect(document.querySelector("#page-title-text").textContent).toBe("Sign in");
     submit("hunter2");
-    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/Ads/AdvertisingTrend"));
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(`${location.origin}/Ads/AdvertisingTrend`));
     expect(fetch).toHaveBeenCalledWith("/api/login", expect.objectContaining({ method: "POST", body: '{"password":"hunter2"}' }));
   });
 
@@ -38,12 +38,21 @@ describe("sign-in page", () => {
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
   });
 
+  it("never hands the browser a path it would read as another site", async () => {
+    stubFetch({ "POST /api/login": { signedIn: true } });
+    const assign = stubNavigation();
+    openApp("/Identity/Login?next=%2F.%2F%2Fevil.example%2Fpage");
+    submit("hunter2");
+    await vi.waitFor(() => expect(assign).toHaveBeenCalled());
+    expect(new URL(assign.mock.calls[0][0], "https://elsewhere.example").origin).toBe(location.origin);
+  });
+
   it("keeps a same-site return address's query and fragment", async () => {
     stubFetch({ "POST /api/login": { signedIn: true } });
     const assign = stubNavigation();
     openApp(`/Identity/Login?next=${encodeURIComponent("/Ads/AdvertisingTrend?view=all#top")}`);
     submit("hunter2");
-    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/Ads/AdvertisingTrend?view=all#top"));
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(`${location.origin}/Ads/AdvertisingTrend?view=all#top`));
   });
 
   it("says so when the password is wrong, and stays put", async () => {

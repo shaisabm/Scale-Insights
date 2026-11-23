@@ -46,7 +46,8 @@ describe("GET /api/ads/trend", () => {
         { adProduct: "SP", date: "2026-11-01", impressions: 200, clicks: 8, cost: 4, orders: 2, units: 2, sales: 25 },
         { adProduct: "SP", date: "2026-11-02", impressions: 100, clicks: 4, cost: 2, orders: 1, units: 1, sales: 10 },
       ],
-      synced: { SP: { first: "2026-11-01", last: "2026-11-02", syncedAt: "2026-11-03T14:00:00.000Z" } },
+      synced: { SP: { first: "2026-11-01", last: "2026-11-02", syncedAt: "2026-11-03T14:00:00.000Z", ranges: [["2026-11-01", "2026-11-02"]] } },
+      adTypes: { SP: { state: "ok" }, SB: { state: "missing" }, SD: { state: "missing" } },
     });
   });
 

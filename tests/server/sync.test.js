@@ -235,4 +235,36 @@ describe("syncAds", () => {
     const { rows } = await db.execute("SELECT status, error FROM ads_report_requests WHERE report_id = 'sb-old'");
     expect([rows[0].status, rows[0].error]).toEqual(["FAILED", "Report status failed: HTTP 404"]);
   });
+
+  const unsupported = async db => (await db.execute("SELECT ad_product FROM ads_unsupported ORDER BY ad_product")).rows.map(r => r.ad_product);
+
+  it("remembers an ad type Amazon refuses with 401 or 403, and forgets it once a request works", async () => {
+    const db = createClient({ url: ":memory:" });
+    const ads = fakeAds();
+    const create = ads.createReport.bind(ads);
+    let refuse = { SB: 401, SD: 403 };
+    ads.createReport = async (profileId, spec) => {
+      const product = { sbCampaigns: "SB", sdCampaigns: "SD" }[spec.configuration.reportTypeId];
+      if (refuse[product]) throw new Error(`Report request failed: HTTP ${refuse[product]} {"code":"UNAUTHORIZED"}`);
+      return create(profileId, spec);
+    };
+    const c = clock();
+    await syncAds({ db, ads, profileId: PROFILE, now: c.now, sleep: c.sleep });
+    expect(await unsupported(db)).toEqual(["SB", "SD"]);
+    refuse = { SD: 403 };
+    c.advance(HOUR);
+    await syncAds({ db, ads, profileId: PROFILE, now: c.now, sleep: c.sleep });
+    expect(await unsupported(db)).toEqual(["SD"]);
+  });
+
+  it("doesn't treat other failures as an ad type the account lacks", async () => {
+    const db = createClient({ url: ":memory:" });
+    const ads = fakeAds();
+    ads.createReport = async () => {
+      throw new Error("Report request failed: HTTP 500 {}");
+    };
+    const c = clock();
+    await syncAds({ db, ads, profileId: PROFILE, now: c.now, sleep: c.sleep });
+    expect(await unsupported(db)).toEqual([]);
+  });
 });

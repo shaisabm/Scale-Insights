@@ -26,6 +26,15 @@ const SCHEMA = [
     synced_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_product, date)
   )`,
+  // Ad types Amazon refused for a profile (HTTP 401 or 403 on a report request), so combined
+  // totals can leave them out instead of waiting for them. Cleared when a request succeeds.
+  `CREATE TABLE IF NOT EXISTS ads_unsupported (
+    profile_id TEXT NOT NULL,
+    ad_product TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product)
+  )`,
   // Async report requests that are waiting on Amazon.
   `CREATE TABLE IF NOT EXISTS ads_report_requests (
     report_id TEXT PRIMARY KEY,

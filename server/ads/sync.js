@@ -173,10 +173,15 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
     const stored = await db.execute({ sql: "SELECT date, synced_at FROM ads_synced_days WHERE profile_id = ? AND ad_product = ?", args: [profileId, product] });
     const synced = new Map(stored.rows.map(r => [r.date, r.synced_at]));
     try {
+      let accepted = false;
       for (const w of planWindows({ lastDate, synced, now: now(), historyDays: REPORTS[product].historyDays })) {
         if (pending.some(p => p.ad_product === product && p.start_date <= w.end && p.end_date >= w.start)) continue;
         const req = await requestReport(ads, profileId, product, w);
         if (!req) continue;
+        if (!accepted) {
+          accepted = true;
+          await db.execute({ sql: "DELETE FROM ads_unsupported WHERE profile_id = ? AND ad_product = ?", args: [profileId, product] });
+        }
         await db.execute({
           sql: "INSERT OR REPLACE INTO ads_report_requests (report_id, profile_id, ad_product, start_date, end_date, status, requested_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)",
           args: [req.reportId, profileId, product, req.start, req.end, iso(), iso()],
@@ -185,6 +190,14 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
       }
     } catch (err) {
       // One ad product failing (say, an account with no Sponsored Brands) shouldn't stop the others.
+      // Amazon refusing access (401/403) means the account doesn't have this ad type: remember it,
+      // so combined totals leave it out rather than wait for it.
+      if (/^Report request failed: HTTP 40[13]\b/.test(err.message)) {
+        await db.execute({
+          sql: "INSERT OR REPLACE INTO ads_unsupported (profile_id, ad_product, reason, checked_at) VALUES (?, ?, ?, ?)",
+          args: [profileId, product, err.message, iso()],
+        });
+      }
       summary.errors.push(`${product}: ${err.message}`);
     }
   }

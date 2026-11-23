@@ -6,7 +6,7 @@ const realTrend = {
   from: "2026-07-25",
   to: "2026-11-21",
   days: [{ adProduct: "SP", date: "2026-11-01", impressions: 100, clicks: 4, cost: 2, orders: 1, units: 1, sales: 25 }],
-  synced: { SP: { first: "2026-08-24", last: "2026-11-21", syncedAt: "2026-11-22T14:00:00.000Z" } },
+  synced: { SP: { first: "2026-08-24", last: "2026-11-21", syncedAt: "2026-11-22T14:00:00.000Z", ranges: [["2026-08-24", "2026-11-21"]] } },
 };
 const dataSwitch = () => document.querySelector(".data-switch input");
 const trendCalls = fetch => fetch.mock.calls.filter(([url]) => url === "/api/ads/trend").length;

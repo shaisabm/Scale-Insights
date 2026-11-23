@@ -251,29 +251,46 @@
     const ratio = (a, b, k = 1) => (b ? (a / b) * k : 0);
     return { ...t, acos: ratio(t.ppcCost, t.ppcSales, 100), ppcConversion: ratio(t.ppcOrders, t.clicks, 100), cpc: ratio(t.ppcCost, t.clicks), ctr: ratio(t.clicks, t.impressions, 100), costPerOrder: ratio(t.ppcCost, t.ppcOrders), asp: ratio(t.ppcSales, t.ppcUnits) };
   };
-  // Dates a table has data for: each ad type's synced range (or, for sample data, its days),
-  // cut to the loaded dates. "ALL" only covers dates every ad type has.
-  function coverage(data, adProduct) {
+  // Each ad type's synced dates as contiguous [first, last] ranges, from the API (sample data has
+  // no sync info, so there it is the span of each ad type's days).
+  function syncedRanges(data) {
     const ranges = {};
-    for (const [k, s] of Object.entries(data.synced || {})) ranges[k] = [s.first, s.last];
+    for (const [k, s] of Object.entries(data.synced || {})) ranges[k] = s.ranges || [];
     for (const d of data.days) {
       if (data.synced && data.synced[d.adProduct]) continue;
-      const r = ranges[d.adProduct] || (ranges[d.adProduct] = [d.date, d.date]);
+      const r = (ranges[d.adProduct] ||= [[d.date, d.date]])[0];
       if (d.date < r[0]) r[0] = d.date;
       if (d.date > r[1]) r[1] = d.date;
     }
-    const picked = adProduct === "ALL" ? Object.values(ranges) : ranges[adProduct] ? [ranges[adProduct]] : [];
-    if (!picked.length) return null;
-    const first = picked.reduce((a, r) => (r[0] > a ? r[0] : a), data.from || "");
-    const last = picked.reduce((a, r) => (r[1] < a ? r[1] : a), data.to || "9999-12-31");
-    return first <= last ? { first, last } : null;
+    return ranges;
+  }
+  // Ad types the combined table needs: all the ones the sync covers, except any Amazon doesn't
+  // offer this account (without sync states, as for sample data: the ones that have data).
+  const neededTypes = (data, ranges) => (data.adTypes ? Object.keys(data.adTypes).filter(k => data.adTypes[k].state !== "unsupported") : Object.keys(ranges));
+  // A column counts only when every one of its dates is loaded and synced, for each ad type it
+  // covers. Synced days with no ad activity still count, as zero.
+  function columnKnown(data, ranges, adProduct, from, to) {
+    if (from < (data.from || "") || to > (data.to || "9999-12-31")) return false;
+    const types = adProduct === "ALL" ? neededTypes(data, ranges) : [adProduct];
+    return types.length > 0 && types.every(k => (ranges[k] || []).some(([a, b]) => a <= from && to <= b));
+  }
+  const TYPE_NAMES = Object.fromEntries(AD_PRODUCTS);
+  // Says why the combined table has gaps, or leaves an ad type out.
+  function allTypesNote(data) {
+    const types = data.adTypes || {};
+    const named = (...states) => Object.keys(types).filter(k => states.includes(types[k].state)).map(k => TYPE_NAMES[k] || k);
+    const notes = [];
+    const waiting = named("pending", "missing"), refused = named("unsupported");
+    if (waiting.length) notes.push(`${waiting.join(" and ")} ${waiting.length > 1 ? "haven't" : "hasn't"} finished syncing, so these totals show "—" until ${waiting.length > 1 ? "they do" : "it does"}.`);
+    if (refused.length) notes.push(`${refused.join(" and ")} ${refused.length > 1 ? "aren't" : "isn't"} included: Amazon doesn't offer ${refused.length > 1 ? "them" : "it"} for this account.`);
+    return notes.length ? `<p class="lead">${notes.join(" ")}</p>` : "";
   }
   function liveTrend(st, data, adProduct) {
-    const cover = coverage(data, adProduct), cols = [];
+    const ranges = syncedRanges(data), cols = [];
     for (let i = st.cols - 1; i >= 0; i--) {
       const end = SP.addDays(st.last, -i * st.days), start = SP.addDays(end, -st.days + 1), from = SP.iso(start), to = SP.iso(end);
       // A column reaching past the dates we have data for is unknown, not zero.
-      const known = cover && from >= cover.first && to <= cover.last;
+      const known = columnKnown(data, ranges, adProduct, from, to);
       cols.push({ start, end, from, to, p: known ? SP.adTotals(data.days, adProduct, from, to) : null });
     }
     const shown = cols.filter(c => c.p);
@@ -318,7 +335,7 @@
         // All campaign types first, then each ad type the account has data for.
         const tables = [["ALL", "all campaign types"], ...AD_PRODUCTS.filter(([k]) => current.days.some(d => d.adProduct === k))];
         $("#adt", root).innerHTML = current.days.length
-          ? tables.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${liveTrend(st, current, k)}`).join("")
+          ? tables.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${k === "ALL" ? allTypesNote(current) : ""}${liveTrend(st, current, k)}`).join("")
           : `<p class="lead">No Amazon Ads data yet. It syncs every morning, or use Sync now.</p>`;
         SP.paintHeat(root);
       };

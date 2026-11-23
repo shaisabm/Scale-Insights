@@ -146,11 +146,12 @@
   // ================= Sign in =================
   // One shared password (APP_PASSWORD on Vercel). Pages with live data send people here first.
   // Only same-site return addresses: resolve against this origin and refuse anything that leaves
-  // it, such as "//host" or "/\host", which browsers treat as another site.
+  // it, such as "//host" or "/\host". Return the full checked URL, never just its path: a path
+  // like "/.//host" resolves to "//host", which a browser reads as another site.
   const nextPath = () => {
     try {
       const url = new URL(new URLSearchParams(location.search).get("next") || "/", location.origin);
-      return url.origin === location.origin ? url.pathname + url.search + url.hash : "/";
+      return url.origin === location.origin ? url.href : "/";
     } catch {
       return "/";
     }
