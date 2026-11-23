@@ -77,6 +77,12 @@ export async function refreshSbProducts(db, ads, profileId, { timeZone = "Americ
   if (!claim.rowsAffected) return false;
   try {
     return await listAndRecord(status.rows[0]);
+  } catch (err) {
+    // Recorded before the lease is given up, and only while this call holds it, so a failure can't
+    // overwrite what a sync that took over since has found. ready_at and the history stay as the
+    // last refresh that worked left them.
+    await db.execute({ sql: "UPDATE ads_product_map_status SET error = ? WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [err.message, profileId, owner] }).catch(() => {});
+    throw err;
   } finally {
     // If giving the lease up fails, it runs out at lease_until instead.
     await db.execute({ sql: "UPDATE ads_product_map_status SET lease_owner = NULL, lease_until = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND lease_owner = ?", args: [profileId, owner] }).catch(() => {});
@@ -357,15 +363,9 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   // Once reports are collected and requested, listing Sponsored Brands ads may use up to half the
   // budget; a longer list carries on in the next run.
   if (products.includes("SB_SEARCH") && typeof ads.request === "function") {
+    // refreshSbProducts records its own failure in the status row, while it holds the lease.
     try { await refreshSbProducts(db, ads, profileId, { timeZone, now, deadline: started + budgetMs / 2 }); }
-    catch (err) {
-      summary.errors.push(`SB product map: ${err.message}`);
-      // Record why, but keep ready_at (and the history) from the last refresh that worked.
-      await db.execute({
-        sql: "INSERT INTO ads_product_map_status (profile_id, ad_product, ready_at, error) VALUES (?, 'SB_SEARCH', NULL, ?) ON CONFLICT (profile_id, ad_product) DO UPDATE SET error = excluded.error",
-        args: [profileId, err.message],
-      });
-    }
+    catch (err) { summary.errors.push(`SB product map: ${err.message}`); }
   }
 
   while ((await pendingRequests()).length && now() - started + POLL_MS < budgetMs) {

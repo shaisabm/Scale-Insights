@@ -118,12 +118,32 @@ describe("search term reports", () => {
     const mapReady = async () => (await zeroSales(db, { profileId, from, to })).coverage.SB_SEARCH.mapReady;
     const mapRows = async () => Number((await db.execute("SELECT COUNT(*) AS n FROM ads_search_product_history")).rows[0].n);
 
+    const error = async () => (await db.execute("SELECT error FROM ads_product_map_status")).rows[0].error;
+
     expect((await run(down)).errors).toContain("SB product map: Sponsored Brands ad list failed: HTTP 503");
-    expect(await mapReady()).toBe(false);
+    expect([await mapReady(), await error()]).toEqual([false, "Sponsored Brands ad list failed: HTTP 503"]);
     await run(listed);
-    expect([await mapReady(), await mapRows()]).toEqual([true, 1]);
+    expect([await mapReady(), await mapRows(), await error()]).toEqual([true, 1, null]);
     await run(down);
     expect([await mapReady(), await mapRows()]).toEqual([true, 1]);
+  });
+
+  it("records a failed list's error only while that sync still holds the lease", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ads = {
+      async request() {
+        // Another sync takes over while this request is out, and then the request fails.
+        await db.execute("UPDATE ads_product_map_status SET lease_owner = 'other', lease_until = 0");
+        return { status: 503, data: {} };
+      },
+      async createReport(profile, spec) { return `report-${spec.startDate}`; },
+      async getReport(profile, id) { return { status: "COMPLETED", url: id }; },
+      async downloadReport() { return []; },
+    };
+    const summary = await syncAds({ db, ads, profileId, products: ["SB_SEARCH"], now: () => Date.UTC(2026, 10, 22, 15), budgetMs: 30_000, sleep: async () => {} });
+    // The failure stays in this sync's summary, but can't overwrite what the other sync records.
+    expect(summary.errors).toContain("SB product map: Sponsored Brands ad list failed: HTTP 503");
+    expect((await db.execute("SELECT error, lease_owner FROM ads_product_map_status")).rows.map(r => [r.error, r.lease_owner])).toEqual([[null, "other"]]);
   });
 
   it("shows each product's title and a link to its image served by this site", async () => {
@@ -423,18 +443,42 @@ describe("search term reports", () => {
     expect(await refreshSbProducts(db, ads, profileId, { now })).toBe(true);
   });
 
-  it("stops without writing once another sync has taken over its lease", async () => {
+  it("ignores a stalled sync's late page once another sync has taken over its lease", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
-    const ads = { request: async (method, path, { body }) => {
-      const page = Number(body.nextToken || 0);
-      // While the second page loads, the lease passes to another sync, as if this one had stalled past it.
-      if (page === 1) await db.execute("UPDATE ads_product_map_status SET lease_owner = 'other', lease_until = 0");
-      return { status: 200, data: { ads: [sbAd(`g${page}`, ["B0PRODUCTA"])], ...(page < 1 ? { nextToken: "1" } : {}) } };
+    let clock = at("2026-11-22"), release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const tokens = [];
+    const page = n => ({ status: 200, data: { ads: [sbAd(`g${n}`, ["B0PRODUCTA"])], nextToken: String(n + 1) } });
+    // The first sync stalls on its second page; only its request waits on the gate.
+    const stalled = { request: async (method, path, { body }) => {
+      tokens.push(["first", body.nextToken ?? null]);
+      if (body.nextToken !== "1") return page(0);
+      await gate;
+      return { status: 200, data: { ads: [sbAd("late", ["B0PRODUCTZ"])], nextToken: "late" } };
     } };
-    expect(await refreshSbProducts(db, ads, profileId, { now: () => at("2026-11-22") })).toBe(false);
-    expect((await db.execute("SELECT ad_group_id FROM ads_sb_ads_scan")).rows.map(r => r.ad_group_id)).toEqual(["g0"]);
-    expect((await db.execute("SELECT COUNT(*) AS n FROM ads_search_product_history")).rows[0].n).toBe(0);
-    expect((await db.execute("SELECT ready_through, lease_owner FROM ads_product_map_status")).rows.map(r => [r.ready_through, r.lease_owner])).toEqual([[null, "other"]]);
+    const second = { request: async (method, path, { body }) => {
+      tokens.push(["second", body.nextToken ?? null]);
+      clock += 1000;
+      return page(Number(body.nextToken || 0));
+    } };
+    const state = async () => ({
+      status: (await db.execute("SELECT next_token, scan_started_at, ready_through FROM ads_product_map_status")).rows.map(r => ({ ...r })),
+      scan: (await db.execute("SELECT ad_group_id FROM ads_sb_ads_scan ORDER BY ad_group_id")).rows.map(r => r.ad_group_id),
+      history: (await db.execute("SELECT * FROM ads_search_product_history")).rows.map(r => ({ ...r })),
+    });
+
+    const first = refreshSbProducts(db, stalled, profileId, { now: () => clock });
+    await vi.waitFor(() => expect(tokens).toContainEqual(["first", "1"]));
+    // Past the lease, a second sync takes over, carries on from the saved token and stops at its deadline.
+    clock += 2 * 60_000 + 1;
+    expect(await refreshSbProducts(db, second, profileId, { now: () => clock, deadline: clock + 1 })).toBe(false);
+    expect(tokens).toEqual([["first", null], ["first", "1"], ["second", "1"]]);
+    const before = await state();
+    expect(before).toMatchObject({ status: [{ next_token: "2", ready_through: null }], scan: ["g0", "g1"], history: [] });
+
+    release();
+    expect(await first).toBe(false);
+    expect(await state()).toEqual(before);
   });
 
   it("drops a product map built before it had dates, so the next sync rebuilds it", async () => {

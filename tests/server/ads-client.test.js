@@ -125,6 +125,21 @@ describe("createAdsClient", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("refuses an already-cancelled request without leaving a failed token refresh unhandled", async () => {
+    const unhandled = [];
+    const onUnhandled = reason => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const fetch = vi.fn(async () => { throw new Error("token service down"); });
+      const ads = createAdsClient(cfg, { fetch });
+      await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.abort() })).rejects.toThrow(/abort/i);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("writes to the test account with the test login's token", async () => {
     const fetch = fakeFetch(() => Response.json({ campaigns: { success: [] } }, { status: 207 }));
     const ads = createAdsClient(cfg, { fetch });

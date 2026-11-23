@@ -27,7 +27,11 @@ export function assertAllowed({ method, path, profileId, testProfileId, producti
 /** Waits for `promise` unless `signal` aborts first. The work itself carries on for anyone else waiting on it. */
 function untilAborted(promise, signal) {
   if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    // The work has started and may have no one else waiting on it, so its failure is handled here.
+    promise.catch(() => {});
+    return Promise.reject(signal.reason);
+  }
   return new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason);
     signal.addEventListener("abort", abort, { once: true });
