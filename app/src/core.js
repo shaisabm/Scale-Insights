@@ -49,8 +49,26 @@
   // the sample data; the "Real data" switch in the top bar changes that (and needs sign-in).
   SP.env = window.SP_ENV || "development";
   SP.canSwitchData = SP.env !== "production";
-  SP.usesRealData = () => !SP.canSwitchData || localStorage.getItem("sp-data-source") === "real";
-  SP.setRealData = on => localStorage.setItem("sp-data-source", on ? "real" : "sample");
+  // The choice is remembered in localStorage when the browser allows it. If storage is blocked, a
+  // choice made on this page is kept in memory, so the switch still works until the next reload.
+  let dataChoice = null;
+  SP.usesRealData = () => {
+    if (!SP.canSwitchData) return true;
+    if (dataChoice !== null) return dataChoice;
+    try {
+      return localStorage.getItem("sp-data-source") === "real";
+    } catch {
+      return false; // no readable saved choice: start on sample data
+    }
+  };
+  SP.setRealData = on => {
+    dataChoice = on;
+    try {
+      localStorage.setItem("sp-data-source", on ? "real" : "sample");
+    } catch {
+      SP.toast("This browser blocked saving the choice, so it won't be remembered after a reload.");
+    }
+  };
 
   // ---------- Icons ----------
   const I = (SP.ICON = {
@@ -367,15 +385,16 @@
   SP.trend = cfg => {
     const head = `<tr><th class="l">${cfg.corner || ""}</th>${cfg.noSummary ? "" : `<th class="sumcol r">${cfg.summaryLabel || "Summary"}</th>`}${cfg.heads.map(h => `<th class="r dh">${h.link ? `<a href="#" data-col="${h.key || ""}">` : "<span>"}${h.top}<br>${h.bottom}${h.link ? "</a>" : "</span>"}</th>`).join("")}${cfg.analysis ? '<th class="c">Analysis</th>' : ""}</tr>`;
     const body = cfg.rows.map(r => {
+      // A null value means "no data", shown as a dash and left out of the heat scale.
       const vals = r.values;
-      const scale = vals.map(v => v);
+      const scale = vals.filter(v => v != null);
       const lo = Math.min(...scale), hi = Math.max(...scale);
       const lvl = v => {
-        if (!r.heat || hi === lo) return 0;
+        if (v == null || !r.heat || hi === lo) return 0;
         const t = (v - lo) / (hi - lo); const bad = r.heat === "down" ? t : 1 - t;
         return bad > 0.85 ? 4 : bad > 0.6 ? 3 : bad > 0.4 ? 2 : bad > 0.25 ? 1 : 0;
       };
-      const f = v => (r.fmt ? r.fmt(v) : SP.int(v));
+      const f = v => (v == null ? '<span title="No data for these dates">—</span>' : r.fmt ? r.fmt(v) : SP.int(v));
       const neg = v => (r.negRed && v < 0 ? " neg" : "");
       const spark = cfg.analysis ? `<td class="c">${sparkBars(vals)}</td>` : "";
       const cl = r.hl ? (v => (v >= (r.hl) ? ' style="background:#f6ee3f"' : "")) : (() => "");

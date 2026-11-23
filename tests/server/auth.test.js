@@ -3,6 +3,7 @@ import { POST as login } from "../../api/login.js";
 import { POST as logout } from "../../api/logout.js";
 import { GET as session } from "../../api/session.js";
 import { SESSION_COOKIE, createSessionToken, requireUser, secretMatches, verifySessionToken } from "../../server/auth.js";
+import { parseCookies } from "../../server/http.js";
 
 const SECRET = "session-secret";
 const NOW = Date.UTC(2026, 10, 22);
@@ -42,6 +43,12 @@ describe("requireUser", () => {
     expect(denied.status).toBe(401);
     expect(await denied.json()).toEqual({ error: "Sign in required." });
     expect(requireUser(withCookie(createSessionToken(SECRET)), env)).toBeNull();
+  });
+
+  it("still finds a valid session next to a malformed cookie", () => {
+    const req = new Request("https://app.test/api/x", { headers: { cookie: `broken=%E0%A4%A; ${SESSION_COOKIE}=${createSessionToken(SECRET)}` } });
+    expect(requireUser(req, { SESSION_SECRET: SECRET })).toBeNull();
+    expect(parseCookies("broken=%E0%A4%A; ok=a%20b")).toEqual({ broken: "%E0%A4%A", ok: "a b" });
   });
 
   it("returns 500 when no session secret is configured", () => {

@@ -9,11 +9,17 @@ function lastDays(SP, count) {
   return Array.from({ length: count }, (_, i) => SP.iso(SP.addDays(SP.lastDate, -i)));
 }
 
-async function openTrend(days) {
+// Synced range ending on SP.lastDate and going `back` days, as /api/ads/trend reports it.
+const covered = (SP, back = 89) => ({ first: SP.iso(SP.addDays(SP.lastDate, -back)), last: SP.iso(SP.lastDate), syncedAt: "2026-11-22T14:00:00.000Z" });
+
+async function openTrend(days, { cover = SP => ({ SP: covered(SP), SB: covered(SP), SD: covered(SP) }), sync = { requested: 1, stored: 1, failed: 0, pending: 0, rows: 5, errors: [] } } = {}) {
   stubNavigation();
   const fetch = stubFetch({
-    "GET /api/ads/trend": () => ({ from: "x", to: "y", days: days(window.SP), synced: { SP: { first: "x", last: "y", syncedAt: "2026-11-22T14:00:00.000Z" } } }),
-    "POST /api/sync/ads": { requested: 1, stored: 1, failed: 0, pending: 0, rows: 5 },
+    "GET /api/ads/trend": () => {
+      const SP = window.SP;
+      return { from: SP.iso(SP.addDays(SP.lastDate, -119)), to: SP.iso(SP.lastDate), days: days(SP), synced: cover(SP) };
+    },
+    "POST /api/sync/ads": sync,
   });
   openApp("/Ads/AdvertisingTrend");
   await vi.waitFor(() => expect(document.querySelector("#adt")).not.toBeNull());
@@ -118,5 +124,35 @@ describe("Advertising trend page", () => {
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/sync/ads", expect.objectContaining({ method: "POST" })));
     await vi.waitFor(() => expect(document.querySelector("#toast").textContent).toBe("Amazon Ads data is up to date."));
     expect(fetch.mock.calls.filter(([url]) => url === "/api/ads/trend")).toHaveLength(2);
+  });
+
+  it.each([
+    [{ requested: 2, stored: 1, failed: 1, pending: 0, rows: 5, errors: [] }, "1 report failed"],
+    [{ requested: 1, stored: 1, failed: 0, pending: 0, rows: 5, errors: ["SB: Report request failed: HTTP 401"] }, "SB: Report request failed: HTTP 401"],
+    [{ requested: 3, stored: 1, failed: 1, pending: 1, rows: 5, errors: [] }, "still being prepared"],
+  ])("Sync now reports problems instead of up to date (%#)", async (summary, text) => {
+    await openTrend(() => [], { sync: summary });
+    document.querySelector("[data-sync]").click();
+    await vi.waitFor(() => expect(document.querySelector("#toast").textContent).toContain(text));
+    expect(document.querySelector("#toast").textContent).toContain("problems");
+  });
+
+  it("still says when reports are only pending", async () => {
+    await openTrend(() => [], { sync: { requested: 2, stored: 0, failed: 0, pending: 2, rows: 0, errors: [] } });
+    document.querySelector("[data-sync]").click();
+    await vi.waitFor(() => expect(document.querySelector("#toast").textContent).toBe("Amazon is still preparing some reports. Check back in a few minutes."));
+  });
+
+  it("shows dates without synced data as unavailable, not zero", async () => {
+    // Data is stored for the last 21 days only.
+    await openTrend(SP => lastDays(SP, 56).map(d => day("SP", d)), { cover: SP => ({ SP: covered(SP, 20) }) });
+    const SP = window.SP;
+    const sales = () => rowValues(document.querySelector("table.trend"), "ppcSales");
+    expect(sales()).toEqual(["$840.00", ...Array(5).fill("—"), "$280.00", "$280.00", "$280.00"]);
+    const last = document.querySelector("[data-k=last]");
+    last.value = SP.iso(SP.addDays(SP.lastDate, 7));
+    last.dispatchEvent(new Event("change", { bubbles: true }));
+    // The week after the last synced day is unknown too; the summary only counts known weeks.
+    expect(sales()).toEqual(["$840.00", ...Array(4).fill("—"), "$280.00", "$280.00", "$280.00", "—"]);
   });
 });

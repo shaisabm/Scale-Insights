@@ -26,6 +26,26 @@ describe("sign-in page", () => {
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
   });
 
+  it.each([
+    ["an encoded backslash", "%2F%5Cevil.example%2Fpage"],
+    ["another site's full address", "https%3A%2F%2Fevil.example%2F"],
+    ["a script address", "javascript%3Aalert(1)"],
+  ])("refuses %s as the return address", async (_, next) => {
+    stubFetch({ "POST /api/login": { signedIn: true } });
+    const assign = stubNavigation();
+    openApp(`/Identity/Login?next=${next}`);
+    submit("hunter2");
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
+  });
+
+  it("keeps a same-site return address's query and fragment", async () => {
+    stubFetch({ "POST /api/login": { signedIn: true } });
+    const assign = stubNavigation();
+    openApp(`/Identity/Login?next=${encodeURIComponent("/Ads/AdvertisingTrend?view=all#top")}`);
+    submit("hunter2");
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/Ads/AdvertisingTrend?view=all#top"));
+  });
+
   it("says so when the password is wrong, and stays put", async () => {
     stubFetch({ "POST /api/login": { status: 401, json: { error: "Wrong password." } } });
     const assign = stubNavigation();
@@ -45,5 +65,19 @@ describe("log out", () => {
     document.querySelector("#logout").click();
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/Identity/Login"));
     expect(fetch).toHaveBeenCalledWith("/api/logout", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("stays signed in and offers a retry when logging out fails", async () => {
+    let calls = 0;
+    stubFetch({ "POST /api/logout": () => (++calls === 1 ? { status: 500, json: { error: "Server unavailable" } } : { signedIn: false }) });
+    const assign = stubNavigation();
+    openApp("/");
+    document.querySelector("#logout").click();
+    await vi.waitFor(() => expect(document.querySelector(".modal")).not.toBeNull());
+    expect(document.querySelector(".modal").textContent).toContain("Server unavailable");
+    expect(assign).not.toHaveBeenCalled();
+    document.querySelector(".modal [data-ok]").click();
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/Identity/Login"));
+    expect(calls).toBe(2);
   });
 });

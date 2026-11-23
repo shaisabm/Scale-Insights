@@ -74,11 +74,17 @@
 
   // ---------- User menu & popovers ----------
   const userBtn = $("#user-btn"), userMenu = $("#user-menu");
-  $("#logout").addEventListener("click", async e => {
-    e.preventDefault();
-    try { await SP.api.post("/api/logout"); } catch { /* the cookie is cleared or already gone */ }
+  // Go to sign-in only once the server has cleared the session; otherwise say so and offer a retry.
+  const logOut = async () => {
+    try {
+      await SP.api.post("/api/logout");
+    } catch (err) {
+      SP.modal("Couldn't log out", `<p>${SP.esc(err.message)}</p><p>You're still signed in on this browser.</p>`, () => { logOut(); }, "Try again");
+      return;
+    }
     location.assign(SP.signInPath);
-  });
+  };
+  $("#logout").addEventListener("click", e => { e.preventDefault(); logOut(); });
 
   // ---------- Real data switch (preview deployments and local development only) ----------
   if (SP.canSwitchData) {
@@ -606,7 +612,9 @@
     });
   }
 
+  let routeSeq = 0;
   function route() {
+    const seq = ++routeSeq;
     const path = norm(location.pathname);
     const key = Object.keys(SP.pages).find(k => k.toLowerCase() === path.toLowerCase());
     const page = key ? SP.pages[key] : { title: "Page not found", noSub: true, render: () => `<div class="placeholder"><h2>Page not found</h2>There's nothing at this address. <a href="/">Back to the dashboard</a>.</div>` };
@@ -640,9 +648,14 @@
     };
     if (!page.load) return paint();
     view.innerHTML = `<div class="page page-${section}"><p class="lead">Loading…</p></div>`;
-    return page.load().then(paint, err => {
-      view.innerHTML = `<div class="page page-${section}"><div class="placeholder"><h2>This page couldn't load</h2>${SP.esc(err.message)}</div></div>`;
-    });
+    // Only the latest route() may change the view; an older load that finishes late is dropped.
+    return page.load().then(
+      data => { if (seq === routeSeq) paint(data); },
+      err => {
+        if (seq !== routeSeq) return;
+        view.innerHTML = `<div class="page page-${section}"><div class="placeholder"><h2>This page couldn't load</h2>${SP.esc(err.message)}</div></div>`;
+      },
+    );
   }
 
   $("#page-title").addEventListener("click", e => {

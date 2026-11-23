@@ -9,7 +9,8 @@ const READ_POSTS = [/^\/reporting\/reports$/, /\/list$/];
 
 export function isReadOnly(method, path) {
   if (method === "GET") return true;
-  return method === "POST" && READ_POSTS.some(re => re.test(path.split("?")[0]));
+  // Match the path alone: a query or fragment such as "#/list" must not make a write look like a read.
+  return method === "POST" && READ_POSTS.some(re => re.test(path.split(/[?#]/)[0]));
 }
 
 /**
@@ -27,6 +28,8 @@ export function assertAllowed({ method, path, profileId, testProfileId, producti
 export function createAdsClient(cfg, { fetch = globalThis.fetch } = {}) {
   async function request(method, path, { profileId, body, contentType = "application/json", accept, humanApproved = false } = {}) {
     assertAllowed({ method, path, profileId, testProfileId: cfg.testProfileId, production: cfg.production, humanApproved });
+    const url = new URL(cfg.host + path);
+    if (url.protocol !== "https:") throw new Error(`Refusing to send Amazon Ads credentials to ${url.origin}: the Ads API host must use https.`);
     const onTestAccount = Boolean(cfg.testProfileId) && String(profileId) === String(cfg.testProfileId);
     const token = await getAccessToken(
       { clientId: cfg.clientId, clientSecret: cfg.clientSecret, refreshToken: onTestAccount ? cfg.testRefreshToken : cfg.refreshToken },
@@ -35,7 +38,7 @@ export function createAdsClient(cfg, { fetch = globalThis.fetch } = {}) {
     const headers = { Authorization: `Bearer ${token}`, "Amazon-Advertising-API-ClientId": cfg.clientId, Accept: accept || contentType };
     if (profileId) headers["Amazon-Advertising-API-Scope"] = String(profileId);
     if (body !== undefined) headers["Content-Type"] = contentType;
-    const res = await fetch(cfg.host + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await fetch(url.href, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await res.text();
     let data;
     try {

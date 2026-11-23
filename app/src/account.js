@@ -145,9 +145,15 @@
 
   // ================= Sign in =================
   // One shared password (APP_PASSWORD on Vercel). Pages with live data send people here first.
+  // Only same-site return addresses: resolve against this origin and refuse anything that leaves
+  // it, such as "//host" or "/\host", which browsers treat as another site.
   const nextPath = () => {
-    const next = new URLSearchParams(location.search).get("next") || "/";
-    return next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    try {
+      const url = new URL(new URLSearchParams(location.search).get("next") || "/", location.origin);
+      return url.origin === location.origin ? url.pathname + url.search + url.hash : "/";
+    } catch {
+      return "/";
+    }
   };
   SP.pages["/Identity/Login"] = {
     title: "Sign in", noSub: true, section: "account", noIcon: true, smallTitle: true,

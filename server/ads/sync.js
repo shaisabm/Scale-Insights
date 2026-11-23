@@ -137,18 +137,30 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
 
   async function collect() {
     for (const req of await pendingRequests()) {
-      const report = await ads.getReport(profileId, req.report_id);
-      if (report.status === "COMPLETED" && report.url) {
-        const rows = normalizeRows(req.ad_product, await ads.downloadReport(report.url));
-        await storeWindow(db, { profileId, product: req.ad_product, start: req.start_date, end: req.end_date, rows, syncedAt: iso() });
-        await setStatus(req.report_id, "STORED");
-        summary.stored++;
-        summary.rows += rows.length;
-      } else if (report.status === "FAILED" || now() - Date.parse(req.requested_at) > GIVE_UP_MS) {
-        await setStatus(req.report_id, "FAILED", report.failureReason || "Not ready after 24 hours");
-        summary.failed++;
-      } else {
-        await setStatus(req.report_id, report.status || req.status);
+      const expired = now() - Date.parse(req.requested_at) > GIVE_UP_MS;
+      try {
+        const report = await ads.getReport(profileId, req.report_id);
+        if (report.status === "COMPLETED" && report.url) {
+          const rows = normalizeRows(req.ad_product, await ads.downloadReport(report.url));
+          await storeWindow(db, { profileId, product: req.ad_product, start: req.start_date, end: req.end_date, rows, syncedAt: iso() });
+          await setStatus(req.report_id, "STORED");
+          summary.stored++;
+          summary.rows += rows.length;
+        } else if (report.status === "FAILED" || expired) {
+          await setStatus(req.report_id, "FAILED", report.failureReason || "Not ready after 24 hours");
+          summary.failed++;
+        } else {
+          await setStatus(req.report_id, report.status || req.status);
+        }
+      } catch (err) {
+        // A failed status check or download doesn't stop the other reports. The request stays
+        // pending for the next run, unless it's too old to finish.
+        const message = `${req.ad_product}: ${err.message}`;
+        if (!summary.errors.includes(message)) summary.errors.push(message);
+        if (expired) {
+          await setStatus(req.report_id, "FAILED", err.message);
+          summary.failed++;
+        }
       }
     }
   }

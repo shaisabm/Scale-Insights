@@ -194,4 +194,45 @@ describe("syncAds", () => {
     await syncAds({ db, ads: retry, profileId: PROFILE, now: c.now, sleep: c.sleep });
     expect(retry.created.map(s => [s.configuration.reportTypeId, s.startDate])).toEqual([["spAdvertisedProduct", addDays(LAST, -89)]]);
   });
+
+  // Puts a waiting report request in the table, as an earlier run would have.
+  const seedRequest = (db, id, product, start, end, requestedAt) =>
+    db.execute({
+      sql: "INSERT INTO ads_report_requests (report_id, profile_id, ad_product, start_date, end_date, status, requested_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)",
+      args: [id, PROFILE, product, start, end, requestedAt, requestedAt],
+    });
+
+  it("keeps going when one report's status check fails, and leaves it to retry", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ads = fakeAds();
+    const spReady = await ads.createReport(PROFILE, reportSpec("SP", { start: addDays(LAST, -27), end: LAST }));
+    ads.created.length = 0;
+    await seedRequest(db, "sb-broken", "SB", addDays(LAST, -59), addDays(LAST, -29), new Date(NOW - 2 * HOUR).toISOString());
+    await seedRequest(db, spReady, "SP", addDays(LAST, -27), LAST, new Date(NOW - HOUR).toISOString());
+    const getReport = ads.getReport.bind(ads);
+    ads.getReport = async (profileId, id) => {
+      if (id === "sb-broken") throw new Error("Report status failed: HTTP 503");
+      return getReport(profileId, id);
+    };
+    const c = clock();
+    const summary = await syncAds({ db, ads, profileId: PROFILE, products: ["SP"], now: c.now, sleep: c.sleep });
+    // The finished SP report is stored, new SP windows are still requested, and the SB one waits.
+    expect(summary).toEqual({ requested: 2, stored: 3, failed: 0, pending: 1, rows: 90, errors: ["SB: Report status failed: HTTP 503"] });
+    const { rows } = await db.execute("SELECT report_id, status FROM ads_report_requests WHERE report_id = 'sb-broken'");
+    expect(rows[0].status).toBe("PENDING");
+  });
+
+  it("retires a report that is too old even when its status check fails", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ads = fakeAds();
+    ads.getReport = async () => {
+      throw new Error("Report status failed: HTTP 404");
+    };
+    await seedRequest(db, "sb-old", "SB", addDays(LAST, -59), addDays(LAST, -29), new Date(NOW - 25 * HOUR).toISOString());
+    const c = clock();
+    const summary = await syncAds({ db, ads, profileId: PROFILE, products: [], now: c.now, sleep: c.sleep });
+    expect(summary).toMatchObject({ failed: 1, pending: 0, errors: ["SB: Report status failed: HTTP 404"] });
+    const { rows } = await db.execute("SELECT status, error FROM ads_report_requests WHERE report_id = 'sb-old'");
+    expect([rows[0].status, rows[0].error]).toEqual(["FAILED", "Report status failed: HTTP 404"]);
+  });
 });

@@ -37,6 +37,8 @@ describe("isReadOnly", () => {
 
   it("treats everything else as a write", () => {
     expect(isReadOnly("POST", "/sp/campaigns")).toBe(false);
+    expect(isReadOnly("POST", "/sp/campaigns#/list")).toBe(false);
+    expect(isReadOnly("POST", "/sp/campaigns?x=1#/list")).toBe(false);
     expect(isReadOnly("PUT", "/sp/campaigns")).toBe(false);
     expect(isReadOnly("POST", "/sp/campaigns/delete")).toBe(false);
     expect(isReadOnly("DELETE", "/reporting/reports/abc")).toBe(false);
@@ -72,6 +74,20 @@ describe("createAdsClient", () => {
     const fetch = fakeFetch();
     const ads = createAdsClient(cfg, { fetch });
     await expect(ads.request("POST", "/sp/campaigns", { profileId: "111", body: {} })).rejects.toThrow(/Blocked POST \/sp\/campaigns/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a write disguised with a /list fragment before any network call", async () => {
+    const fetch = fakeFetch();
+    const ads = createAdsClient(cfg, { fetch });
+    await expect(ads.request("POST", "/sp/campaigns#/list", { profileId: "111", body: {} })).rejects.toThrow(/Blocked POST/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a non-HTTPS Ads host before getting a token", async () => {
+    const fetch = fakeFetch();
+    const ads = createAdsClient({ ...cfg, host: "http://ads.test" }, { fetch });
+    await expect(ads.request("GET", "/v2/profiles", { profileId: "111" })).rejects.toThrow(/https/i);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -128,6 +144,24 @@ describe("getAccessToken", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     t = 3_550_000;
     await getAccessToken(creds, opts);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares one token request between concurrent cache misses", async () => {
+    let release;
+    const fetch = vi.fn(() => new Promise(resolve => (release = () => resolve(Response.json({ access_token: "shared", expires_in: 3600 })))));
+    const both = Promise.all([getAccessToken(creds, { fetch }), getAccessToken(creds, { fetch })]);
+    release();
+    expect(await both).toEqual(["shared", "shared"]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a later call retry after a shared request fails", async () => {
+    const replies = [Response.json({ error: "server_error" }, { status: 500 }), Response.json({ access_token: "second try", expires_in: 3600 })];
+    const fetch = vi.fn(async () => replies.shift());
+    const both = await Promise.allSettled([getAccessToken(creds, { fetch }), getAccessToken(creds, { fetch })]);
+    expect(both.map(r => r.status)).toEqual(["rejected", "rejected"]);
+    expect(await getAccessToken(creds, { fetch })).toBe("second try");
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 

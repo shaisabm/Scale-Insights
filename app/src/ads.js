@@ -251,15 +251,41 @@
     const ratio = (a, b, k = 1) => (b ? (a / b) * k : 0);
     return { ...t, acos: ratio(t.ppcCost, t.ppcSales, 100), ppcConversion: ratio(t.ppcOrders, t.clicks, 100), cpc: ratio(t.ppcCost, t.clicks), ctr: ratio(t.clicks, t.impressions, 100), costPerOrder: ratio(t.ppcCost, t.ppcOrders), asp: ratio(t.ppcSales, t.ppcUnits) };
   };
-  function liveTrend(st, days, adProduct) {
-    const cols = [];
-    for (let i = st.cols - 1; i >= 0; i--) {
-      const end = SP.addDays(st.last, -i * st.days), start = SP.addDays(end, -st.days + 1);
-      cols.push({ start, end, p: SP.adTotals(days, adProduct, SP.iso(start), SP.iso(end)) });
+  // Dates a table has data for: each ad type's synced range (or, for sample data, its days),
+  // cut to the loaded dates. "ALL" only covers dates every ad type has.
+  function coverage(data, adProduct) {
+    const ranges = {};
+    for (const [k, s] of Object.entries(data.synced || {})) ranges[k] = [s.first, s.last];
+    for (const d of data.days) {
+      if (data.synced && data.synced[d.adProduct]) continue;
+      const r = ranges[d.adProduct] || (ranges[d.adProduct] = [d.date, d.date]);
+      if (d.date < r[0]) r[0] = d.date;
+      if (d.date > r[1]) r[1] = d.date;
     }
-    const sum = SP.adTotals(days, adProduct, SP.iso(cols[0].start), SP.iso(st.last));
-    return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum[key], values: cols.map(c => c.p[key]) })) });
+    const picked = adProduct === "ALL" ? Object.values(ranges) : ranges[adProduct] ? [ranges[adProduct]] : [];
+    if (!picked.length) return null;
+    const first = picked.reduce((a, r) => (r[0] > a ? r[0] : a), data.from || "");
+    const last = picked.reduce((a, r) => (r[1] < a ? r[1] : a), data.to || "9999-12-31");
+    return first <= last ? { first, last } : null;
   }
+  function liveTrend(st, data, adProduct) {
+    const cover = coverage(data, adProduct), cols = [];
+    for (let i = st.cols - 1; i >= 0; i--) {
+      const end = SP.addDays(st.last, -i * st.days), start = SP.addDays(end, -st.days + 1), from = SP.iso(start), to = SP.iso(end);
+      // A column reaching past the dates we have data for is unknown, not zero.
+      const known = cover && from >= cover.first && to <= cover.last;
+      cols.push({ start, end, from, to, p: known ? SP.adTotals(data.days, adProduct, from, to) : null });
+    }
+    const shown = cols.filter(c => c.p);
+    const sum = shown.length ? SP.adTotals(data.days.filter(d => shown.some(c => d.date >= c.from && d.date <= c.to)), adProduct, "", "9999-12-31") : null;
+    return SP.trend({ corner: "Metrics", heads: cols.map(c => ({ top: SP.dd(c.start), bottom: SP.dd(c.end) })), rows: LIVE_METRICS.map(([label, key, fmt, heat]) => ({ label, key, fmt, heat, summary: sum ? sum[key] : null, values: cols.map(c => (c.p ? c.p[key] : null)) })) });
+  }
+  // A sync summary as one message: failures first, then reports still being prepared.
+  const syncMessage = s => {
+    const problems = [...(s.failed ? [`${s.failed} report${s.failed === 1 ? "" : "s"} failed`] : []), ...(s.errors || [])];
+    if (problems.length) return `Sync finished with problems: ${problems.join("; ")}.${s.pending ? " Some reports are still being prepared." : ""}`;
+    return s.pending ? "Amazon is still preparing some reports. Check back in a few minutes." : "Amazon Ads data is up to date.";
+  };
   const syncedNote = data => {
     if (data.sample) return "Sample data. Turn on Real data at the top to see your Amazon Ads numbers.";
     const last = Object.values(data.synced || {}).map(s => s.syncedAt).sort().pop();
@@ -287,12 +313,12 @@
     },
     wire(root, data) {
       const st = { cols: 8, days: 7, last: SP.lastDate };
-      let days = data.days;
+      let current = data;
       const draw = () => {
         // All campaign types first, then each ad type the account has data for.
-        const tables = [["ALL", "all campaign types"], ...AD_PRODUCTS.filter(([k]) => days.some(d => d.adProduct === k))];
-        $("#adt", root).innerHTML = days.length
-          ? tables.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${liveTrend(st, days, k)}`).join("")
+        const tables = [["ALL", "all campaign types"], ...AD_PRODUCTS.filter(([k]) => current.days.some(d => d.adProduct === k))];
+        $("#adt", root).innerHTML = current.days.length
+          ? tables.map(([k, name]) => `<h4 class="ttl">Advertising trend for ${name}</h4>${liveTrend(st, current, k)}`).join("")
           : `<p class="lead">No Amazon Ads data yet. It syncs every morning, or use Sync now.</p>`;
         SP.paintHeat(root);
       };
@@ -305,11 +331,10 @@
           SP.toast("Syncing with Amazon Ads…");
           try {
             const summary = await SP.api.post("/api/sync/ads");
-            const fresh = await SP.api.get("/api/ads/trend");
-            days = fresh.days;
+            current = await SP.api.get("/api/ads/trend");
             draw();
-            $(".meta", root).textContent = syncedNote(fresh);
-            SP.toast(summary.pending ? "Amazon is still preparing some reports. Check back in a few minutes." : "Amazon Ads data is up to date.");
+            $(".meta", root).textContent = syncedNote(current);
+            SP.toast(syncMessage(summary));
           } catch (err) {
             SP.toast(err.message);
           }
