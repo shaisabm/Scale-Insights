@@ -68,6 +68,19 @@ describe("Advertising trend page", () => {
     }
   });
 
+  it("shows the period value when a bar is hovered and hides it when the pointer leaves", async () => {
+    await openTrend(SP => lastDays(SP, 56).map((d, i) => day("SP", d, i < 7 ? 2 : 1)));
+    const bars = [...document.querySelectorAll('table.trend tr[data-metric="ppcSales"] svg.spark rect')].slice(0, 8);
+    bars[0].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    const tooltip = document.querySelector(".spark-tooltip");
+    expect(tooltip.hidden).toBe(false);
+    expect(tooltip.textContent).toBe("$280.00");
+    bars[0].dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+    expect(tooltip.hidden).toBe(true);
+    bars[7].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    expect(tooltip.textContent).toBe("$560.00");
+  });
+
   it("draws all campaign types first, then each ad type, from the API data", async () => {
     await openTrend(SP => [...lastDays(SP, 56).map(d => day("SP", d)), day("SB", SP.iso(SP.lastDate), 2)]);
     const [all, sp, sb] = document.querySelectorAll("table.trend");

@@ -334,7 +334,12 @@
     wire(root, data) {
       const st = { cols: 8, days: 7, last: SP.lastDate };
       let current = data;
+      const tooltip = document.createElement("div");
+      tooltip.className = "spark-tooltip";
+      tooltip.hidden = true;
+      root.append(tooltip);
       const draw = () => {
+        tooltip.hidden = true;
         // All campaign types first, then each ad type the account has data for.
         const tables = [["ALL", "all campaign types"], ...AD_PRODUCTS.filter(([k]) => current.days.some(d => d.adProduct === k))];
         $("#adt", root).innerHTML = current.days.length
@@ -344,6 +349,19 @@
       };
       const readControls = () => $$("[data-k]", root).forEach(i => { if (i.dataset.k === "cols") st.cols = Math.min(16, Math.max(1, +i.value || 1)); if (i.dataset.k === "days") st.days = Math.max(1, +i.value || 1); if (i.dataset.k === "last" && i.value) st.last = new Date(i.value + "T00:00:00"); });
       draw();
+      root.addEventListener("mouseover", e => {
+        const bar = e.target.closest(".spark rect[data-col]");
+        if (!bar) return;
+        const cell = bar.closest("tr").querySelectorAll("td.heat")[Number(bar.dataset.col)];
+        if (!cell) return;
+        tooltip.textContent = cell.textContent.trim();
+        tooltip.hidden = false;
+        const bounds = bar.getBoundingClientRect(), half = tooltip.offsetWidth / 2;
+        tooltip.style.left = `${Math.max(half + 8, Math.min(bounds.left + bounds.width / 2, innerWidth - half - 8))}px`;
+        tooltip.style.top = `${bounds.top - 4}px`;
+      });
+      root.addEventListener("mouseout", e => { if (e.target.closest(".spark rect[data-col]")) tooltip.hidden = true; });
+      root.addEventListener("scroll", () => { tooltip.hidden = true; }, true);
       // The columns are worked out here from data already loaded, so redraw as soon as a control changes.
       root.addEventListener("change", e => { if (e.target.closest("[data-k]")) { readControls(); draw(); } });
       root.addEventListener("click", async e => {

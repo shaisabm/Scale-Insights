@@ -173,6 +173,7 @@ small.sub { display: block; font-size: .75rem; color: var(--muted); }
 .btn-outline.metrics { display: inline-flex; align-items: center; gap: 8px; height: 40px; border-color: var(--ink); color: var(--ink); font-size: 1rem; }
 .btn-outline.metrics svg { width: 18px; height: 18px; }
 .trend-wrap { overflow-x: auto; margin-right: -24px; }
+#adt .trend-wrap { margin-right: 0; }
 table.trend { border-collapse: collapse; font-size: 1rem; min-width: 100%; }
 .trend th, .trend td { padding: 0 8px; height: 52px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .trend thead th { height: 54px; font-weight: 400; border-bottom: 1px solid #c9ced6; vertical-align: middle; line-height: 1.25; }
@@ -189,6 +190,8 @@ table.trend { border-collapse: collapse; font-size: 1rem; min-width: 100%; }
 .trend .neg { color: var(--loss); }
 .trend .i svg, .grid .i svg, .part .i svg { width: 14px; height: 14px; color: var(--faint); vertical-align: -2px; margin-left: 4px; }
 .spark { display: inline-block; vertical-align: middle; }
+#adt .spark rect[data-col]:hover { fill: #008000; }
+.spark-tooltip { position: fixed; z-index: 20; transform: translate(-50%, -100%); padding: 4px 8px; background: #666; color: #fff; font-size: 20px; line-height: 1.25; white-space: nowrap; pointer-events: none; }
 table.part { border-collapse: collapse; font-size: .9375rem; }
 .part th, .part td { padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .part tr:first-child th { background: #eef0f3; font-weight: 600; }

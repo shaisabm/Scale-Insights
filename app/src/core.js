@@ -408,7 +408,7 @@
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${vals.map((v, i) => {
       if (v == null) return "";
       const bh = Math.max(1, (Math.abs(v) / m) * (h - 4));
-      return `<rect x="${i * (bw + 1.5)}" y="${v < 0 ? 2 : h - bh}" width="${bw}" height="${bh}" fill="${v < 0 ? "#f3a3a3" : "#9fb0c8"}" stroke="none"/>`;
+      return `<rect data-col="${i}" x="${i * (bw + 1.5)}" y="${v < 0 ? 2 : h - bh}" width="${bw}" height="${bh}" fill="${v < 0 ? "#f3a3a3" : "#9fb0c8"}" stroke="none"/>`;
     }).join("")}<line x1="0" x2="${w}" y1="${h - 0.5}" y2="${h - 0.5}" stroke="#ccc" stroke-width=".5"/></svg>`;
   }
   // heat cell colours applied once mounted (keeps markup small)
