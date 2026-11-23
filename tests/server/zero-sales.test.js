@@ -13,6 +13,22 @@ const searchRow = (term, cost, { product = "SP_SEARCH", campaignId = "1", adGrou
 });
 
 describe("search term reports", () => {
+  it("includes search reports in a default sync, including the manual sync path", async () => {
+    const db = createClient({ url: ":memory:" });
+    const types = [];
+    const ads = {
+      request: async () => ({ status: 200, data: { ads: [] } }),
+      createReport: async (_profile, spec) => {
+        types.push(spec.configuration.reportTypeId);
+        return `report-${types.length}`;
+      },
+    };
+    const summary = await syncAds({ db, ads, profileId, now: () => Date.UTC(2026, 10, 22, 15), budgetMs: 0 });
+    expect(summary.requested).toBe(9);
+    expect(types).toContain("spSearchTerm");
+    expect(types).toContain("sbSearchTerm");
+  });
+
   it("requires sign-in before returning account search terms", async () => {
     vi.stubEnv("SESSION_SECRET", "test-session-secret");
     try {
