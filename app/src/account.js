@@ -143,6 +143,40 @@
     },
   };
 
+  // ================= Sign in =================
+  // One shared password (APP_PASSWORD on Vercel). Pages with live data send people here first.
+  // Only same-site return addresses: resolve against this origin and refuse anything that leaves
+  // it, such as "//host" or "/\host". Return the full checked URL, never just its path: a path
+  // like "/.//host" resolves to "//host", which a browser reads as another site.
+  const nextPath = () => {
+    try {
+      const url = new URL(new URLSearchParams(location.search).get("next") || "/", location.origin);
+      return url.origin === location.origin ? url.href : "/";
+    } catch {
+      return "/";
+    }
+  };
+  SP.pages["/Identity/Login"] = {
+    title: "Sign in", noSub: true, section: "account", noIcon: true, smallTitle: true,
+    render() {
+      return `<form class="signin" id="signin">${SP.panel(`<label class="field"><span>Password</span><input type="password" name="password" autocomplete="current-password" required></label><p class="signin-error" hidden></p><button class="btn-dark" type="submit">Sign in</button>`)}</form>`;
+    },
+    wire(root) {
+      const form = $("#signin", root), error = $(".signin-error", root);
+      form.addEventListener("submit", async e => {
+        e.preventDefault();
+        error.hidden = true;
+        try {
+          await SP.api.post("/api/login", { password: $("[name=password]", form).value });
+          location.assign(nextPath());
+        } catch (err) {
+          error.textContent = err.status === 401 ? "That password isn't right." : err.message;
+          error.hidden = false;
+        }
+      });
+    },
+  };
+
   // Keep a renamed account name in the top bar on every page.
   const saved = localStorage.getItem("sp-name");
   if (saved) document.addEventListener("DOMContentLoaded", () => { const n = document.querySelector(".user-name"); if (n) n.textContent = saved; });

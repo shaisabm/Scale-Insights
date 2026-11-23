@@ -74,6 +74,27 @@
 
   // ---------- User menu & popovers ----------
   const userBtn = $("#user-btn"), userMenu = $("#user-menu");
+  // Go to sign-in only once the server has cleared the session; otherwise say so and offer a retry.
+  const logOut = async () => {
+    try {
+      await SP.api.post("/api/logout");
+    } catch (err) {
+      SP.modal("Couldn't log out", `<p>${SP.esc(err.message)}</p><p>You're still signed in on this browser.</p>`, () => { logOut(); }, "Try again");
+      return;
+    }
+    location.assign(SP.signInPath);
+  };
+  $("#logout").addEventListener("click", e => { e.preventDefault(); logOut(); });
+
+  // ---------- Real data switch (preview deployments and local development only) ----------
+  if (SP.canSwitchData) {
+    const sw = document.createElement("label");
+    sw.className = "switch data-switch";
+    sw.title = "Show live data from your Amazon account instead of sample data. Needs sign-in.";
+    sw.innerHTML = `<input type="checkbox" ${SP.usesRealData() ? "checked" : ""}><span class="track"></span>Real data`;
+    $(".topbar-right").prepend(sw);
+    sw.querySelector("input").addEventListener("change", e => { SP.setRealData(e.target.checked); route(); });
+  }
   userBtn.addEventListener("click", e => {
     e.stopPropagation();
     const open = userMenu.hidden;
@@ -591,7 +612,9 @@
     });
   }
 
+  let routeSeq = 0;
   function route() {
+    const seq = ++routeSeq;
     const path = norm(location.pathname);
     const key = Object.keys(SP.pages).find(k => k.toLowerCase() === path.toLowerCase());
     const page = key ? SP.pages[key] : { title: "Page not found", noSub: true, render: () => `<div class="placeholder"><h2>Page not found</h2>There's nothing at this address. <a href="/">Back to the dashboard</a>.</div>` };
@@ -616,10 +639,23 @@
     title.classList.toggle("small", !!page.smallTitle);
     document.title = `${page.title} - Seller Portal`;
 
-    view.innerHTML = `<div class="page page-${section}">${page.render()}</div>`;
-    const root = view.firstElementChild;
-    SP.wireCommon(root);
-    if (page.wire) page.wire(root);
+    // Pages with live data define load(); its result is passed to render() and wire().
+    const paint = data => {
+      view.innerHTML = `<div class="page page-${section}">${page.render(data)}</div>`;
+      const root = view.firstElementChild;
+      SP.wireCommon(root);
+      if (page.wire) page.wire(root, data);
+    };
+    if (!page.load) return paint();
+    view.innerHTML = `<div class="page page-${section}"><p class="lead">Loading…</p></div>`;
+    // Only the latest route() may change the view; an older load that finishes late is dropped.
+    return page.load().then(
+      data => { if (seq === routeSeq) paint(data); },
+      err => {
+        if (seq !== routeSeq) return;
+        view.innerHTML = `<div class="page page-${section}"><div class="placeholder"><h2>This page couldn't load</h2>${SP.esc(err.message)}</div></div>`;
+      },
+    );
   }
 
   $("#page-title").addEventListener("click", e => {

@@ -94,3 +94,8 @@ table.utable { width: auto; }
   .page-account .ptabs[data-tabs="acct"] { margin-top: 10px; }
   .utable { font-size: .75rem; }
 }
+
+/* Sign in */
+.signin { max-width: 380px; }
+.signin .btn-dark { width: 100%; }
+.signin-error { color: var(--loss); font-size: .875rem; margin: 0 0 12px; }
