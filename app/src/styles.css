@@ -220,12 +220,6 @@ td.profit { background: #f7f9fc; }
 .footer { display: flex; justify-content: flex-end; gap: 24px; font-size: .875rem; color: var(--faint); padding: 60px 0 12px; }
 .footer a { color: var(--body); }
 
-.fab { position: fixed; right: 20px; z-index: 900; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
-.fab-help { bottom: 100px; width: 48px; height: 48px; background: #1d3da8; }
-.fab-help svg { width: 26px; height: 26px; stroke-width: 2; }
-.fab-chat { bottom: 16px; width: 60px; height: 60px; background: #425b76; color: #fff; right: 16px; }
-.fab-chat svg { width: 30px; height: 30px; }
-
 /* ---------- Breakpoints ---------- */
 @media (max-width: 1399.98px) {
   .toolbar-row { flex-wrap: wrap; }
