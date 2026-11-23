@@ -78,13 +78,15 @@ const SCHEMA = [
     updated_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, asin)
   )`,
-  // When that history last finished updating (ready_at), why the latest refresh failed, if it did,
-  // and where an unfinished ads list carries on (next_token, from the list begun at scan_started_at).
-  // Without a ready history, search reports for the ad type can't count as complete.
+  // When that history last finished updating (ready_at) and the last date it confirms
+  // (ready_through), why the latest refresh failed, if it did, and where an unfinished ads list
+  // carries on (next_token, from the list begun at scan_started_at). Search reports for the ad type
+  // can't count as complete for dates after ready_through.
   `CREATE TABLE IF NOT EXISTS ads_product_map_status (
     profile_id TEXT NOT NULL,
     ad_product TEXT NOT NULL,
     ready_at TEXT,
+    ready_through TEXT,
     error TEXT,
     next_token TEXT,
     scan_started_at TEXT,
@@ -138,25 +140,36 @@ const migrated = new WeakSet();
 export async function migrate(db) {
   if (!migrated.has(db)) {
     await db.batch(SCHEMA, "write");
-    // Search term rows stored before units were synced get the column, and their days are marked
-    // unsynced so the next sync fetches them again with units.
-    const columns = (await db.execute("PRAGMA table_info(ads_search_terms_daily)")).rows.map(r => r.name);
-    if (!columns.includes("units")) {
-      await db.batch([
-        "ALTER TABLE ads_search_terms_daily ADD COLUMN units INTEGER NOT NULL DEFAULT 0",
-        "DELETE FROM ads_synced_days WHERE ad_product IN ('SP_SEARCH', 'SB_SEARCH')",
-      ], "write");
-    }
-    // Product maps built before they had dates are dropped, and marked not ready, so the next sync
-    // builds the dated history instead.
-    const status = (await db.execute("PRAGMA table_info(ads_product_map_status)")).rows.map(r => r.name);
-    if (!status.includes("next_token")) {
-      await db.batch([
-        "ALTER TABLE ads_product_map_status ADD COLUMN next_token TEXT",
-        "ALTER TABLE ads_product_map_status ADD COLUMN scan_started_at TEXT",
-        "UPDATE ads_product_map_status SET ready_at = NULL",
-        "DROP TABLE IF EXISTS ads_search_product_map",
-      ], "write");
+    // Column checks and the changes they call for share one write transaction, which takes the
+    // write lock before looking, so two cold starts can't both find a column missing and add it.
+    const tx = await db.transaction("write");
+    try {
+      const columns = async table => (await tx.execute(`PRAGMA table_info(${table})`)).rows.map(r => r.name);
+      // Search term rows stored before units were synced get the column, and their days are marked
+      // unsynced so the next sync fetches them again with units. Reports requested without units
+      // are given up, so collecting one can't mark its days synced again.
+      if (!(await columns("ads_search_terms_daily")).includes("units")) {
+        await tx.batch([
+          "ALTER TABLE ads_search_terms_daily ADD COLUMN units INTEGER NOT NULL DEFAULT 0",
+          "DELETE FROM ads_synced_days WHERE ad_product IN ('SP_SEARCH', 'SB_SEARCH')",
+          "UPDATE ads_report_requests SET status = 'FAILED', error = 'Requested before units were synced' WHERE ad_product IN ('SP_SEARCH', 'SB_SEARCH') AND status IN ('PENDING', 'PROCESSING')",
+        ]);
+      }
+      // Product maps built before they had dates are dropped, and marked not ready, so the next sync
+      // builds the dated history instead.
+      const status = await columns("ads_product_map_status");
+      if (!status.includes("next_token")) {
+        await tx.batch([
+          "ALTER TABLE ads_product_map_status ADD COLUMN next_token TEXT",
+          "ALTER TABLE ads_product_map_status ADD COLUMN scan_started_at TEXT",
+          "UPDATE ads_product_map_status SET ready_at = NULL",
+          "DROP TABLE IF EXISTS ads_search_product_map",
+        ]);
+      }
+      if (!status.includes("ready_through")) await tx.execute("ALTER TABLE ads_product_map_status ADD COLUMN ready_through TEXT");
+      await tx.commit();
+    } finally {
+      tx.close();
     }
     migrated.add(db);
   }

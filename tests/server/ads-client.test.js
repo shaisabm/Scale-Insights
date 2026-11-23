@@ -103,6 +103,12 @@ describe("createAdsClient", () => {
     expect(init.headers).toMatchObject({ Authorization: "Bearer token:real-refresh", "Amazon-Advertising-API-ClientId": "client-id", "Amazon-Advertising-API-Scope": "111" });
   });
 
+  it("stops a request when the caller's signal aborts", async () => {
+    const fetch = fakeFetch((url, init) => new Promise((resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason))));
+    const ads = createAdsClient(cfg, { fetch });
+    await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.timeout(20) })).rejects.toThrow(/abort/i);
+  });
+
   it("writes to the test account with the test login's token", async () => {
     const fetch = fakeFetch(() => Response.json({ campaigns: { success: [] } }, { status: 207 }));
     const ads = createAdsClient(cfg, { fetch });

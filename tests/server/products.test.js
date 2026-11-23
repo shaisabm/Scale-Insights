@@ -79,7 +79,8 @@ describe("GET /api/ads/product-image", () => {
     const res = await productImage(signedIn("B0AAAAAAAA"));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/jpeg");
-    expect(res.headers.get("cache-control")).toBe("private, max-age=86400");
+    // The browser asks again each time, so a signed-out viewer gets a 401, not a cached image.
+    expect(res.headers.get("cache-control")).toBe("private, no-cache");
     expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(fetch.mock.calls[0][0]).toBe("https://m.media-amazon.com/images/I/71a._SL160_.jpg");
   });
@@ -103,5 +104,7 @@ describe("GET /api/ads/product-image", () => {
       : new Response(new Uint8Array([9]), { headers: { "Content-Type": "image/jpeg" } }));
     vi.stubGlobal("fetch", fetch);
     expect((await productImage(signedIn("B0AAAAAAAA"))).status).toBe(502);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("https://m.media-amazon.com/images/I/71a._SL160_.jpg", expect.objectContaining({ redirect: "manual" }));
   });
 });

@@ -34,7 +34,8 @@ export function cleanZeroSettings(input) {
     const limits = {};
     for (const side of ["min", "max"]) {
       if (f[side] == null || f[side] === "") continue;
-      const n = Number(f[side]);
+      // Only numbers and numeric strings: Number() would also turn [5] into 5 and true into 1.
+      const n = ["number", "string"].includes(typeof f[side]) ? Number(f[side]) : NaN;
       if (!Number.isFinite(n)) return { error: `The ${side} for ${k} must be a number.` };
       limits[side] = n;
     }

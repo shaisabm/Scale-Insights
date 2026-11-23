@@ -18,5 +18,6 @@ export async function GET(request) {
   const res = await fetch(source, { redirect: "manual", signal: AbortSignal.timeout(10_000) }).catch(() => null);
   const type = res?.headers.get("content-type") || "";
   if (!res?.ok || !type.startsWith("image/")) return json({ error: "The product image is unavailable." }, 502);
-  return new Response(await res.arrayBuffer(), { headers: { "Content-Type": type, "Cache-Control": "private, max-age=86400" } });
+  // no-cache makes the browser ask again each time, so a signed-out viewer gets requireUser's 401.
+  return new Response(await res.arrayBuffer(), { headers: { "Content-Type": type, "Cache-Control": "private, no-cache" } });
 }

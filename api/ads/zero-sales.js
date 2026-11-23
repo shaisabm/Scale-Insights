@@ -14,7 +14,7 @@ export async function GET(request) {
   const today = todayIn(process.env.AMAZON_ADS_TIME_ZONE || "America/Los_Angeles");
   const days = Number(params.get("days") || 30);
   const to = params.has("to") ? isoDate(params.get("to")) : addDays(today, -1);
-  const from = params.has("from") ? isoDate(params.get("from")) : to && [7, 14, 30].includes(days) ? addDays(to, -days + 1) : null;
+  const from = params.has("from") ? isoDate(params.get("from")) : to && [7, 14, 30].includes(days) ? isoDate(addDays(to, -days + 1)) : null;
   const page = Number(params.get("page") || 0);
   // At most 400 dates, counting both ends.
   const badRange = !from || !to || from > to || to > today || to > addDays(from, 399);

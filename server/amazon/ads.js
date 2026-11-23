@@ -26,7 +26,8 @@ export function assertAllowed({ method, path, profileId, testProfileId, producti
 
 /** Amazon Ads API client. Every request passes the write guard first. */
 export function createAdsClient(cfg, { fetch = globalThis.fetch } = {}) {
-  async function request(method, path, { profileId, body, contentType = "application/json", accept, humanApproved = false } = {}) {
+  // `signal` lets the caller stop the request, reading its answer included.
+  async function request(method, path, { profileId, body, contentType = "application/json", accept, humanApproved = false, signal } = {}) {
     assertAllowed({ method, path, profileId, testProfileId: cfg.testProfileId, production: cfg.production, humanApproved });
     const url = new URL(cfg.host + path);
     if (url.protocol !== "https:") throw new Error(`Refusing to send Amazon Ads credentials to ${url.origin}: the Ads API host must use https.`);
@@ -38,7 +39,7 @@ export function createAdsClient(cfg, { fetch = globalThis.fetch } = {}) {
     const headers = { Authorization: `Bearer ${token}`, "Amazon-Advertising-API-ClientId": cfg.clientId, Accept: accept || contentType };
     if (profileId) headers["Amazon-Advertising-API-Scope"] = String(profileId);
     if (body !== undefined) headers["Content-Type"] = contentType;
-    const res = await fetch(url.href, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await fetch(url.href, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });
     const text = await res.text();
     let data;
     try {

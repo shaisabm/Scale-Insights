@@ -164,6 +164,8 @@ describe("search term reports", () => {
       expect((await get("from=2026-02-30&to=2026-03-01")).status).toBe(400);
       expect(await (await get("days=7")).json()).toMatchObject({ from: addDays(today, -7), to: addDays(today, -1) });
       for (const days of ["abc", "1e9", "31", "-7"]) expect((await get(`days=${days}`)).status).toBe(400);
+      // A preset that would start before year 0 isn't a date.
+      expect((await get("to=0000-01-05&days=30")).status).toBe(400);
       // 400 dates at most, counting both ends.
       expect((await get(`from=${addDays(today, -399)}&to=${today}`)).status).toBe(200);
       expect((await get(`from=${addDays(today, -400)}&to=${today}`)).status).toBe(400);
@@ -228,12 +230,26 @@ describe("search term reports", () => {
     await db.batch([
       "CREATE TABLE ads_search_terms_daily (profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, date TEXT NOT NULL, campaign_id TEXT NOT NULL, ad_group_id TEXT NOT NULL DEFAULT '', search_term TEXT NOT NULL, impressions INTEGER NOT NULL DEFAULT 0, clicks INTEGER NOT NULL DEFAULT 0, cost REAL NOT NULL DEFAULT 0, orders INTEGER NOT NULL DEFAULT 0, sales REAL NOT NULL DEFAULT 0, PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, search_term))",
       "CREATE TABLE ads_synced_days (profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, date TEXT NOT NULL, synced_at TEXT NOT NULL, PRIMARY KEY (profile_id, ad_product, date))",
+      "CREATE TABLE ads_report_requests (report_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, status TEXT NOT NULL, requested_at TEXT NOT NULL, updated_at TEXT NOT NULL, error TEXT)",
+      "INSERT INTO ads_report_requests VALUES ('old-search', 'p', 'SP_SEARCH', '2026-11-01', '2026-11-01', 'PENDING', 't', 't', NULL), ('trend', 'p', 'SP', '2026-11-01', '2026-11-01', 'PENDING', 't', 't', NULL)",
       "INSERT INTO ads_search_terms_daily (profile_id, ad_product, date, campaign_id, search_term) VALUES ('p', 'SP_SEARCH', '2026-11-01', '1', 'old term')",
       "INSERT INTO ads_synced_days VALUES ('p', 'SP_SEARCH', '2026-11-01', 't'), ('p', 'SB_SEARCH', '2026-11-01', 't'), ('p', 'SP', '2026-11-01', 't')",
     ], "write");
     await migrate(db);
     expect((await db.execute("SELECT units FROM ads_search_terms_daily")).rows[0].units).toBe(0);
     expect((await db.execute("SELECT ad_product FROM ads_synced_days")).rows.map(r => r.ad_product)).toEqual(["SP"]);
+    // A search report requested without units can't be collected and mark those days synced again.
+    expect((await db.execute("SELECT report_id, status FROM ads_report_requests ORDER BY report_id")).rows.map(r => [r.report_id, r.status])).toEqual([["old-search", "FAILED"], ["trend", "PENDING"]]);
+  });
+
+  it("checks and upgrades the schema inside one write transaction", async () => {
+    const db = createClient({ url: ":memory:" });
+    const transaction = vi.spyOn(db, "transaction");
+    const execute = vi.spyOn(db, "execute");
+    await migrate(db);
+    // The write lock is taken before looking, so two cold starts can't both add a column.
+    expect(transaction).toHaveBeenCalledWith("write");
+    expect(execute.mock.calls.some(([stmt]) => /PRAGMA table_info/.test(String(stmt?.sql ?? stmt)))).toBe(false);
   });
 
   it("matches Sponsored Brands search terms to the product each ad group had on that date", async () => {
@@ -261,11 +277,32 @@ describe("search term reports", () => {
     const first = await run();
     expect(first.rows.map(r => [r.asin, r.spend])).toEqual([["B0PRODUCTE", 40], ["B0PRODUCTB", 20], ["B0PRODUCTC", 12], ["B0PRODUCTA", 10]]);
     expect(first.coverage.SB_SEARCH.unattributedSpend).toBe(45);
+    // Sponsored Brands P&L is unknown, so a page of only those rows has no P&L total either.
+    expect(first.totals.pl).toBeNull();
     // A later list that finds nothing changed confirms the dates since the last one.
     await scanOn(db, "2026-11-22", ...now);
     const second = await run();
     expect(second.rows.find(r => r.asin === "B0PRODUCTB").spend).toBe(23);
     expect(second.coverage.SB_SEARCH.unattributedSpend).toBe(42);
+  });
+
+  it("counts Sponsored Brands as matched only through the dates the latest finished list confirms", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ready = async () => (await zeroSales(db, { profileId, from, to, today: "2026-11-22" })).coverage.SB_SEARCH.mapReady;
+    // Read on the 20th, it confirms products through the 19th, but Amazon reports through the 21st.
+    await scanOn(db, "2026-11-20", sbAd("2", ["B0PRODUCTA"]));
+    expect(await ready()).toBe(false);
+    await scanOn(db, "2026-11-22", sbAd("2", ["B0PRODUCTA"]));
+    expect(await ready()).toBe(true);
+  });
+
+  it("leaves out an ad group whose enabled ads include one that lists no products", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SB_SEARCH", start: to, end: to, rows: [searchRow("brand term", 20, { product: "SB_SEARCH" })], syncedAt: "now" });
+    await scanOn(db, "2026-11-22", sbAd("2", ["B0PRODUCTA"]), { ...sbAd("2", []), adId: "no-asins", creative: {} });
+    const result = await zeroSales(db, { profileId, from, to, settings: { ...structuredClone(ZERO_DEFAULTS), filters: {} } });
+    expect(result.rows).toEqual([]);
+    expect(result.coverage.SB_SEARCH.unattributedSpend).toBe(20);
   });
 
   it("lists Sponsored Brands ads within half the sync budget, after collecting reports, and resumes where it stopped", async () => {
@@ -304,7 +341,7 @@ describe("search term reports", () => {
     expect(Number((await db.execute("SELECT COUNT(*) AS n FROM ads_search_product_history")).rows[0].n)).toBe(6);
   });
 
-  it("starts the ads list over when a saved page token stops working", async () => {
+  it("keeps a saved page token through a temporary failure, and starts over when Amazon refuses it", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     let clock = at("2026-11-22");
     const tokens = [];
@@ -315,9 +352,57 @@ describe("search term reports", () => {
     } });
     // Stops after one page, keeping its token for later.
     expect(await refreshSbProducts(db, ads(200), profileId, { now: () => clock, deadline: clock + 1 })).toBe(false);
+    await expect(refreshSbProducts(db, ads(503), profileId, { now: () => clock })).rejects.toThrow(/HTTP 503/);
     await expect(refreshSbProducts(db, ads(400), profileId, { now: () => clock })).rejects.toThrow(/HTTP 400/);
     await refreshSbProducts(db, ads(200), profileId, { now: () => clock, deadline: clock + 1 });
-    expect(tokens).toEqual([null, "next", null]);
+    expect(tokens).toEqual([null, "next", "next", null]);
+  });
+
+  it("stops a page request still running at the deadline, keeping the last saved token", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    let clock = at("2026-11-22");
+    const tokens = [];
+    const quick = { request: async (method, path, { body }) => {
+      tokens.push(body.nextToken ?? null);
+      clock += 10_000;
+      return { status: 200, data: { ads: [], nextToken: "next" } };
+    } };
+    // Answers only by failing once its signal aborts.
+    const stuck = { request: (method, path, { body, signal }) => {
+      tokens.push(body.nextToken ?? null);
+      return new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    } };
+    expect(await refreshSbProducts(db, quick, profileId, { now: () => clock, deadline: clock + 1 })).toBe(false);
+    expect(await refreshSbProducts(db, stuck, profileId, { deadline: Date.now() + 50 })).toBe(false);
+    await refreshSbProducts(db, quick, profileId, { now: () => clock, deadline: clock + 1 });
+    expect(tokens).toEqual([null, "next", "next"]);
+  });
+
+  it("records a finished list from its saved pages when recording failed, without listing again", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    let failRecording = true;
+    const flaky = new Proxy(db, {
+      get(target, key) {
+        if (key === "batch") {
+          return async (stmts, mode) => {
+            if (failRecording && stmts.some(s => /^UPDATE ads_product_map_status SET ready_at/.test(s.sql ?? ""))) {
+              failRecording = false;
+              throw new Error("write failed");
+            }
+            return target.batch(stmts, mode);
+          };
+        }
+        const value = target[key];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const request = vi.fn(async () => ({ status: 200, data: { ads: [sbAd("2", ["B0PRODUCTA"])] } }));
+    const now = () => at("2026-11-22");
+    await expect(refreshSbProducts(flaky, { request }, profileId, { now })).rejects.toThrow("write failed");
+    expect(await refreshSbProducts(flaky, { request }, profileId, { now })).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    const { rows } = await db.execute("SELECT asins, valid_from, valid_to FROM ads_search_product_history");
+    expect(rows.map(r => [r.asins, r.valid_from, r.valid_to])).toEqual([["B0PRODUCTA", "2026-09-01", "2026-11-21"]]);
   });
 
   it("drops a product map built before it had dates, so the next sync rebuilds it", async () => {

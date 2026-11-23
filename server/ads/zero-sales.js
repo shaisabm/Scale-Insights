@@ -49,7 +49,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     },
     { sql: "SELECT ad_product FROM ads_report_requests WHERE profile_id = ? AND ad_product IN ('SP_SEARCH', 'SB_SEARCH') AND status IN ('PENDING', 'PROCESSING') GROUP BY ad_product", args: [profileId] },
     { sql: "SELECT campaign_id, ad_group_id, COUNT(DISTINCT asin) AS products, MIN(asin) AS asin FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
-    { sql: "SELECT ready_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
+    { sql: "SELECT ready_through FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
   ], "read");
   const [raw, synced, pending, spProducts, sbMap, productRows] = results;
@@ -94,11 +94,14 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   // The source table's footer totals the current page; its ratios come from the page's sums.
   const sum = { impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
   for (const r of shown) for (const k of Object.keys(sum)) sum[k] += r.counts[k];
-  const totals = { ...metrics(sum), pl: cents(shown.reduce((n, r) => n + (r.pl || 0), 0)) };
+  // P&L adds up the rows that have one, and stays unknown when none on the page do.
+  const known = shown.filter(r => r.pl != null);
+  const totals = { ...metrics(sum), pl: known.length ? cents(known.reduce((n, r) => n + r.pl, 0)) : null };
   const waiting = new Set(pending.rows.map(r => r.ad_product));
-  // Sponsored Brands rows need the ad group -> ASIN history; until an ads list has finished they
-  // are all left out, so that coverage isn't complete however many days have synced.
-  const sbMapReady = Boolean(sbMap.rows[0]?.ready_at);
+  // Sponsored Brands rows need the ad group -> ASIN history, which reaches as far as the latest
+  // finished ads list confirms (ready_through). Until it covers the expected dates, their rows are
+  // left out, so coverage isn't complete however many days have synced.
+  const sbThrough = sbMap.rows[0]?.ready_through || null;
   const coverage = {};
   for (const k of ["SP_SEARCH", "SB_SEARCH"]) {
     // Only the dates Amazon can provide are expected to sync; older ones and today aren't.
@@ -106,7 +109,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     const reportedThrough = today ? addDays(today, -1) : to;
     const start = from > availableFrom ? from : availableFrom, end = to < reportedThrough ? to : reportedThrough;
     const days = synced.rows.filter(r => r.ad_product === k && r.date >= start && r.date <= end).length;
-    coverage[k] = { days, expectedDays: dayCount(start, end), pending: waiting.has(k), availableFrom, reportedThrough, unattributedSpend: cents(unattributed[k]), ...(k === "SB_SEARCH" ? { mapReady: sbMapReady } : {}) };
+    coverage[k] = { days, expectedDays: dayCount(start, end), pending: waiting.has(k), availableFrom, reportedThrough, unattributedSpend: cents(unattributed[k]), ...(k === "SB_SEARCH" ? { mapReady: Boolean(sbThrough) && (start > end || sbThrough >= end) } : {}) };
   }
   return { from, to, page, pageSize, total, totals, rows, coverage, settings };
 }

@@ -60,21 +60,35 @@ const SB_ADS = "application/vnd.sbadresource.v4+json";
  */
 export async function refreshSbProducts(db, ads, profileId, { timeZone = "America/Los_Angeles", now = Date.now, deadline = Infinity } = {}) {
   const saved = (await db.execute({ sql: "SELECT next_token, scan_started_at FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] })).rows[0];
+  // A list under way has scan_started_at. With a next_token it carries on from that page; without
+  // one every page was read and saved, and only recording them is left.
   let nextToken = saved?.next_token || null;
-  const startedAt = nextToken ? saved.scan_started_at : new Date(now()).toISOString();
-  if (!nextToken) await db.execute({ sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] });
-  do {
-    if (now() >= deadline) return false;
-    const { status, data } = await ads.request("POST", "/sb/v4/ads/list", {
-      profileId,
-      // Archived ads too: archiving one changes what its ad group advertises.
-      body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) },
-      contentType: SB_ADS,
-      accept: SB_ADS,
-    });
+  const startedAt = saved?.scan_started_at || new Date(now()).toISOString();
+  if (!saved?.scan_started_at) await db.execute({ sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] });
+  if (!saved?.scan_started_at || nextToken) do {
+    const left = deadline - now();
+    if (left <= 0) return false;
+    // A page still loading at the deadline is dropped; the next call asks for it again.
+    const signal = Number.isFinite(left) ? AbortSignal.timeout(Math.ceil(left)) : undefined;
+    let res;
+    try {
+      res = await ads.request("POST", "/sb/v4/ads/list", {
+        profileId,
+        // Archived ads too: archiving one changes what its ad group advertises.
+        body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) },
+        contentType: SB_ADS,
+        accept: SB_ADS,
+        signal,
+      });
+    } catch (err) {
+      if (signal?.aborted) return false;
+      throw err;
+    }
+    const { status, data } = res;
     if (status !== 200) {
-      // A saved token may have expired, so the next call starts the list over rather than retry it.
-      if (nextToken && nextToken === saved?.next_token) await db.execute({ sql: "UPDATE ads_product_map_status SET next_token = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] });
+      // Only the token changes between pages, so HTTP 400 means Amazon refused it (it expired, say)
+      // and the next call starts the list over. Other failures keep it, to carry on from.
+      if (status === 400 && nextToken) await db.execute({ sql: "UPDATE ads_product_map_status SET next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] });
       throw new Error(`Sponsored Brands ad list failed: HTTP ${status}`);
     }
     nextToken = data.nextToken || null;
@@ -100,15 +114,20 @@ export async function refreshSbProducts(db, ads, profileId, { timeZone = "Americ
     const key = `${ad.campaign_id}|${ad.ad_group_id}`;
     const g = groups.get(key) || { campaignId: ad.campaign_id, adGroupId: ad.ad_group_id, asins: new Set(), changed: 0, created: Infinity };
     // Only enabled ads serve, but any ad's change can change what the group advertises. An ad
-    // without dates counts as changed when the list began.
-    if (ad.state === "ENABLED") for (const asin of String(ad.asins).split(",").filter(Boolean)) g.asins.add(asin);
+    // without dates counts as changed when the list began, and an enabled one listing no ASINs
+    // leaves the group's products unknown.
+    if (ad.state === "ENABLED") {
+      const asins = String(ad.asins).split(",").filter(Boolean);
+      if (!asins.length) g.unknown = true;
+      for (const asin of asins) g.asins.add(asin);
+    }
     g.changed = Math.max(g.changed, Number(ad.updated_ms) || startedMs);
     g.created = Math.min(g.created, Number(ad.created_ms) || startedMs);
     groups.set(key, g);
   }
   const stmts = [];
   for (const [key, g] of groups) {
-    if (!g.asins.size) continue;
+    if (g.unknown || !g.asins.size) continue;
     const asins = [...g.asins].sort().join(","), prev = latest.get(key);
     if (prev && prev.asins === asins && g.changed < Date.parse(prev.observed_at)) {
       // Unchanged since the list that last confirmed it.
@@ -124,7 +143,7 @@ export async function refreshSbProducts(db, ads, profileId, { timeZone = "Americ
   }
   await db.batch([
     ...stmts,
-    { sql: "UPDATE ads_product_map_status SET ready_at = ?, error = NULL, next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [new Date(now()).toISOString(), profileId] },
+    { sql: "UPDATE ads_product_map_status SET ready_at = ?, ready_through = ?, error = NULL, next_token = NULL, scan_started_at = NULL WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [new Date(now()).toISOString(), through, profileId] },
     { sql: "DELETE FROM ads_sb_ads_scan WHERE profile_id = ?", args: [profileId] },
   ], "write");
   return true;
