@@ -58,33 +58,101 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const card = (title, body, tip, id) => `<section class="icard"><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${{ st0: "/Ads/SearchTerms", acos: "/Ads/SearchTerms", perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
+  const card = (title, body, tip, id) => `<section class="icard" ${id === "st0" ? "data-zero-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button>${id === "st0" ? "" : `<a href="${{ acos: "/Ads/SearchTerms", perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a>`}</header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
+
+  const sampleZero = () => ({
+    page: 0, pageSize: 7, total: TERMS.length,
+    totals: { impressions: TERMS.reduce((n, t) => n + t[1], 0), clicks: TERMS.reduce((n, t) => n + t[2], 0), pl: TERMS.reduce((n, t) => n + t[3], 0) },
+    rows: TERMS.map(([term, impressions, clicks, pl], i) => ({ term, impressions, clicks, pl, sponsored: "Products", p: P[i % 2] })),
+    coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
+  });
+  const zeroRows = data => data.rows.map(r => ({ p: r.p || null, asin: r.asin || "", sp: r.sponsored, term: r.term, imp: r.impressions, clicks: r.clicks, pl: r.pl }));
+  const zeroPager = data => data.total > 7 ? `<div class="zero-pager" data-zero-pager><button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${Math.ceil(data.total / 7)}</span><button data-zero-next ${data.page >= Math.ceil(data.total / 7) - 1 ? "disabled" : ""}>Next ›</button></div>` : `<div class="zero-pager" data-zero-pager></div>`;
+  const zeroStatus = data => {
+    if (!SP.usesRealData()) return "";
+    const coverage = Object.values(data.coverage || {});
+    if (coverage.length && coverage.every(c => c.days >= c.expectedDays)) return "";
+    return `<div class="zero-status" data-zero-status>Search term reports are ${coverage.some(c => c.pending) ? "still being prepared" : "not fully synced"}. <button class="link-btn" data-zero-sync>Sync now</button></div>`;
+  };
+  const zeroEdit = () => {
+    const track = new Set(["Impressions", "Clicks", "P&L"]);
+    const names = ["Impressions", "Clicks", "Orders", "Units", "Cost per click", "CTR %", "Conversion %", "ACOS %", "ROAS", "Spend", "Sales", "P&L", "Break even bid"];
+    return `<div class="zero-edit"><label class="field"><span>Name</span><input value="Search Terms with 0 Sales" disabled></label><label class="field"><span>Description</span><input value="[Tip]: You can automatically remove poor performing search terms using Automation." disabled></label><label><input type="checkbox" checked disabled> Show tracked columns in Overview</label><hr><label><input type="checkbox" data-zero-asins checked> Hide ASINs</label><label><input type="checkbox" disabled> Hide keywords</label><label class="field"><span>Sort by</span><select disabled><option>Cost in Descending Order</option></select></label><table><thead><tr><th>Filter conditions</th><th>Min</th><th>Max</th><th>Track</th></tr></thead><tbody>${names.map(n => `<tr><th>${n}</th><td><input type="number" step="any" ${n === "Spend" ? 'data-zero-spend value="10.00"' : "disabled"}></td><td><input type="number" step="any" ${n === "Orders" ? 'data-zero-orders value="0"' : "disabled"}></td><td><input type="checkbox" ${track.has(n) ? "checked" : ""} disabled></td></tr>`).join("")}</tbody></table></div>`;
+  };
 
   SP.pages["/Ads"] = {
     title: "Insights overview",
-    render() {
-      const c1 = SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${v}</span>` }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
-        rows: TERMS.map(([term, imp, clicks, v], i) => ({ p: P[i % 2], sp: "Products", term, imp, clicks, pl: v })), sum: rs => ({ imp: rs.reduce((a, r) => a + r.imp, 0), clicks: rs.reduce((a, r) => a + r.clicks, 0), pl: rs.reduce((a, r) => a + r.pl, 0) }) });
+    load: () => (SP.usesRealData() ? SP.api.get("/api/ads/zero-sales?days=30&page=0") : Promise.resolve(sampleZero())),
+    render(data) {
+      const c1 = `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: [{ key: "p", label: "Product", muted: true, fmt: (p, r) => p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>` }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "pl", label: "P&amp;L", align: "r", fmt: v => v == null ? "" : pl(v) }],
+        rows: zeroRows(data), sum: { imp: data.totals.impressions, clicks: data.totals.clicks, pl: data.totals.pl } })}${zeroPager(data)}`;
       const c2 = SP.grid({ id: "i2", search: false, noFoot: true, cls: "fit", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "clicks", label: "Clicks", align: "r" }, { key: "spend", label: "Spend", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "conv", label: "Conversion", align: "r", fmt: v => pct(v) }, { key: "acos", label: "ACOS", align: "r", fmt: v => pct(v) }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ p: P[0], sp: "Products", term: "cordless jump rope", clicks: 28, spend: 25.87, cpc: 0.92, conv: 3.57, acos: 123.25, pl: -24.8 }], sum: rs => ({ ...rs[0], p: null, sp: null, term: null }) });
       const c3 = SP.grid({ id: "i3", search: false, emptyFoot: false, cls: "fit", empty: "No results found", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "orders", label: "Orders", align: "r" }, { key: "spend", label: "Spend", align: "r" }, { key: "cpc", label: "CPC", align: "r" }, { key: "conv", label: "Conversion", align: "r" }, { key: "acos", label: "ACOS", align: "r" }, { key: "pl", label: "P&amp;L", align: "r" }], rows: [] });
       const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
         sum: rs => ({ clicks: rs.reduce((a, r) => a + r.clicks, 0), cpc: rs.reduce((a, r) => a + r.cpc, 0) / rs.length, pl: rs.reduce((a, r) => a + r.pl, 0) }) });
-      const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30)}${ctl.products()}${ctl.apply()}</div>`, "")}
+      const end = data.to ? new Date(`${data.to}T12:00:00`) : SP.addDays(SP.today, -1);
+      const start = data.from ? new Date(`${data.from}T12:00:00`) : SP.addDays(end, -29);
+      const waitingCard = title => `<section class="icard"><header><h3>${title}</h3></header><div class="icard-body"><p>Live data for this insight is not connected yet.</p></div></section>`;
+      const insights = `${SP.panel(`<div class="frow"><label class="zero-date">Last <select data-zero-days><option value="30">30</option><option value="14">14</option><option value="7">7</option></select> Days: <span data-zero-dates>${SP.shortDate(start)} - ${SP.shortDate(end)}</span></label>${ctl.apply()}</div>`, "")}
         ${card("Search Terms with 0 Sales", c1, "[Tip]: You can remove poor search terms automatically with [Automation].", "st0")}
-        ${card("Search Terms with High ACOS", c2, "[Tip]: Use [Automation] strategies to improve your advertising results.", "acos")}
-        ${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}
-        ${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`;
+        ${SP.usesRealData() ? ["Search Terms with High ACOS", "Performing Search Terms", "Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Search Terms with High ACOS", c2, "[Tip]: Use [Automation] strategies to improve your advertising results.", "acos")}${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
-    wire(root) {
+    wire(root, data) {
+      let current = data;
+      let days = 30;
+      let minSpend = 10;
+      let maxOrders = 0;
+      let hideAsins = true;
+      const update = next => {
+        current = next;
+        if (next.from && next.to) $("[data-zero-dates]", root).textContent = `${SP.shortDate(new Date(`${next.from}T12:00:00`))} - ${SP.shortDate(new Date(`${next.to}T12:00:00`))}`;
+        const g = SP._grids.i1;
+        g.rows = zeroRows(next);
+        g.sum = { imp: next.totals.impressions, clicks: next.totals.clicks, pl: next.totals.pl };
+        SP.refreshGrid("i1");
+        $("[data-zero-pager]", root).outerHTML = zeroPager(next);
+        const card = $("[data-zero-card] .icard-body", root);
+        const old = $("[data-zero-status]", card);
+        if (old) old.remove();
+        card.insertAdjacentHTML("afterbegin", zeroStatus(next));
+      };
+      const fetchPage = async page => {
+        if (!SP.usesRealData()) return update(sampleZero());
+        try {
+          const query = new URLSearchParams({ days: String(days), page: String(page), minSpend: String(minSpend), maxOrders: String(maxOrders), hideAsins: String(hideAsins) });
+          update(await SP.api.get(`/api/ads/zero-sales?${query}`));
+        } catch (err) { SP.toast(err.message); }
+      };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");
-        if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
-        if (e.target.closest("[data-apply]")) SP.toast("Insights updated for the chosen dates.");
+        if (ed?.dataset.edit === "st0") {
+          const modal = SP.modal("Edit Search Terms with 0 Sales", zeroEdit(), m => {
+            const spend = Number($("[data-zero-spend]", m).value);
+            const orders = Number($("[data-zero-orders]", m).value);
+            if (!Number.isFinite(spend) || spend < 0 || !Number.isSafeInteger(orders) || orders < 0) { SP.toast("Enter a valid spend and order limit."); return false; }
+            minSpend = spend; maxOrders = orders; hideAsins = $("[data-zero-asins]", m).checked;
+            fetchPage(0);
+          });
+          $("[data-zero-spend]", modal).value = minSpend.toFixed(2);
+          $("[data-zero-orders]", modal).value = maxOrders;
+          $("[data-zero-asins]", modal).checked = hideAsins;
+        } else if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
+        if (e.target.closest("[data-zero-next]")) fetchPage(current.page + 1);
+        if (e.target.closest("[data-zero-prev]")) fetchPage(current.page - 1);
+        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(current.page)).catch(err => SP.toast(err.message));
+        if (e.target.closest("[data-apply]")) fetchPage(0);
+      });
+      root.addEventListener("change", e => {
+        if (!e.target.matches("[data-zero-days]")) return;
+        days = Number(e.target.value);
+        const end = SP.addDays(SP.today, -1), start = SP.addDays(end, -days + 1);
+        $("[data-zero-dates]", root).textContent = `${SP.shortDate(start)} - ${SP.shortDate(end)}`;
+        fetchPage(0);
       });
     },
   };

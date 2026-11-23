@@ -29,7 +29,49 @@ export const REPORTS = {
     columns: ["date", "campaignId", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
     row: r => ({ campaignId: r.campaignId, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
   },
+  SP_SEARCH: {
+    historyDays: 30,
+    adProduct: "SPONSORED_PRODUCTS",
+    reportTypeId: "spSearchTerm",
+    groupBy: ["searchTerm"],
+    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases7d", "sales7d"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases7d, sales: r.sales7d }),
+  },
+  SB_SEARCH: {
+    historyDays: 30,
+    adProduct: "SPONSORED_BRANDS",
+    reportTypeId: "sbSearchTerm",
+    groupBy: ["searchTerm"],
+    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases", "sales"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases, sales: r.sales }),
+  },
 };
+
+export const SEARCH_PRODUCTS = ["SP_SEARCH", "SB_SEARCH"];
+
+/** Map Sponsored Brands ad groups to their advertised ASINs without changing any ads. */
+export async function refreshSbProducts(db, ads, profileId) {
+  const rows = [];
+  let nextToken;
+  do {
+    const { status, data } = await ads.request("POST", "/sb/v4/ads/list", {
+      profileId,
+      body: { maxResults: 100, ...(nextToken ? { nextToken } : {}) },
+      contentType: "application/vnd.sbadresource.v4+json",
+      accept: "application/vnd.sbadresource.v4+json",
+    });
+    if (status !== 200) throw new Error(`Sponsored Brands ad list failed: HTTP ${status}`);
+    for (const ad of data.ads || []) {
+      for (const asin of ad.creative?.asins || []) rows.push({ campaignId: String(ad.campaignId), adGroupId: String(ad.adGroupId), asin: String(asin) });
+    }
+    nextToken = data.nextToken;
+  } while (nextToken);
+  await db.batch([
+    { sql: "DELETE FROM ads_search_product_map WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
+    ...rows.map(r => ({ sql: "INSERT OR IGNORE INTO ads_search_product_map (profile_id, ad_product, campaign_id, ad_group_id, asin) VALUES (?, 'SB_SEARCH', ?, ?, ?)", args: [profileId, r.campaignId, r.adGroupId, r.asin] })),
+  ], "write");
+  return rows.length;
+}
 
 const FRESH_DAYS = 14; // Attribution can still change numbers this recent, so refresh them daily.
 const STALE_MS = 20 * 3600 * 1000;
@@ -74,8 +116,9 @@ export function normalizeRows(product, rows) {
   const out = new Map();
   for (const raw of rows || []) {
     const r = pick(raw);
-    const row = { date: raw.date, campaignId: String(r.campaignId ?? ""), adGroupId: String(r.adGroupId ?? ""), asin: String(r.asin ?? "") };
-    const key = [row.date, row.campaignId, row.adGroupId, row.asin].join("|");
+    const search = SEARCH_PRODUCTS.includes(product);
+    const row = { date: raw.date, campaignId: String(r.campaignId ?? ""), adGroupId: String(r.adGroupId ?? ""), ...(search ? { term: String(r.term ?? "") } : { asin: String(r.asin ?? "") }) };
+    const key = [row.date, row.campaignId, row.adGroupId, search ? row.term : row.asin].join("|");
     const acc = out.get(key) || { ...row, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
     acc.impressions += num(raw.impressions);
     acc.clicks += num(raw.clicks);
@@ -106,10 +149,15 @@ async function requestReport(ads, profileId, product, w) {
 
 /** Replaces one window's rows and marks its days as stored, in one transaction. */
 export async function storeWindow(db, { profileId, product, start, end, rows, syncedAt }) {
-  const stmts = [{ sql: "DELETE FROM ads_daily WHERE profile_id = ? AND ad_product = ? AND date BETWEEN ? AND ?", args: [profileId, product, start, end] }];
+  const search = SEARCH_PRODUCTS.includes(product);
+  const table = search ? "ads_search_terms_daily" : "ads_daily";
+  const stmts = [{ sql: `DELETE FROM ${table} WHERE profile_id = ? AND ad_product = ? AND date BETWEEN ? AND ?`, args: [profileId, product, start, end] }];
   for (const r of rows) {
     if (r.date < start || r.date > end) continue;
-    stmts.push({
+    stmts.push(search ? {
+      sql: "INSERT INTO ads_search_terms_daily (profile_id, ad_product, date, campaign_id, ad_group_id, search_term, impressions, clicks, cost, orders, sales) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.term, r.impressions, r.clicks, r.cost, r.orders, r.sales],
+    } : {
       sql: "INSERT INTO ads_daily (profile_id, ad_product, date, campaign_id, ad_group_id, asin, impressions, clicks, cost, orders, units, sales) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.asin, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales],
     });
@@ -124,11 +172,16 @@ export async function storeWindow(db, { profileId, product, start, end, rows, sy
  * One sync run: store reports requested earlier, request missing or stale windows, then wait
  * for them while `budgetMs` allows. Unfinished reports are picked up by the next run.
  */
-export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Angeles", products = Object.keys(REPORTS), budgetMs = 45_000, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
+export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Angeles", products = ["SP", "SB", "SD"], budgetMs = 45_000, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
   await migrate(db);
   const started = now();
   const iso = () => new Date(now()).toISOString();
   const summary = { requested: 0, stored: 0, failed: 0, pending: 0, rows: 0, errors: [] };
+
+  if (products.includes("SB_SEARCH") && typeof ads.request === "function") {
+    try { await refreshSbProducts(db, ads, profileId); }
+    catch (err) { summary.errors.push(`SB product map: ${err.message}`); }
+  }
 
   const pendingRequests = async () =>
     (await db.execute({ sql: "SELECT * FROM ads_report_requests WHERE profile_id = ? AND status IN ('PENDING', 'PROCESSING') ORDER BY requested_at", args: [profileId] })).rows;

@@ -18,6 +18,30 @@ const SCHEMA = [
     sales REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, asin)
   )`,
+  // Search term reports keep their own grain; adding them to ads_daily would double count trends.
+  `CREATE TABLE IF NOT EXISTS ads_search_terms_daily (
+    profile_id TEXT NOT NULL,
+    ad_product TEXT NOT NULL,
+    date TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    ad_group_id TEXT NOT NULL DEFAULT '',
+    search_term TEXT NOT NULL,
+    impressions INTEGER NOT NULL DEFAULT 0,
+    clicks INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0,
+    orders INTEGER NOT NULL DEFAULT 0,
+    sales REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, search_term)
+  )`,
+  // Sponsored Brands search reports identify an ad group, while the ads list identifies its ASIN.
+  `CREATE TABLE IF NOT EXISTS ads_search_product_map (
+    profile_id TEXT NOT NULL,
+    ad_product TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    ad_group_id TEXT NOT NULL,
+    asin TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product, campaign_id, ad_group_id, asin)
+  )`,
   // Which days have been stored, and when, so recent days can be refreshed.
   `CREATE TABLE IF NOT EXISTS ads_synced_days (
     profile_id TEXT NOT NULL,
