@@ -166,6 +166,32 @@ describe("Search Terms with 0 Sales card", () => {
     expect(labels()).toEqual(moved);
   });
 
+  it("keeps a dragged column order when a page load started while its save was still going", async () => {
+    stubNavigation();
+    const save = later(), page = later();
+    let loads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return save.promise;
+      // Only the zero-sales card's loads are choreographed; the other card's resolve at once.
+      if (!String(url).includes("/api/ads/zero-sales")) return json(response(0));
+      // The first load answers at once; the pager's load waits until the test releases it.
+      return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : page.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    drag("P&L", "Impressions");
+    const moved = ["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"];
+    expect(labels()).toEqual(moved);
+    // Page 2 is requested while the drag's save is still going; only then does the save land,
+    // so the page's reply carries the old order even though nothing is pending any more.
+    document.querySelector("[data-zero-card] [data-zero-next]").click();
+    save.resolve(json({ settings: savedSettings(["p", "sp", "term", "pl", "impressions", "clicks"]) }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    page.resolve(json({ ...response(1), settings: savedSettings([]) }));
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]").textContent).toContain("search term 8"));
+    expect(labels()).toEqual(moved);
+  });
+
   it("saves settings one at a time, so the last change made is the one stored", async () => {
     stubNavigation();
     const saves = [];

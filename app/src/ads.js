@@ -238,11 +238,13 @@
       // settings change, or arrives while a save is still going, may carry older settings, so the
       // local ones are kept then.
       const fetchPage = (c, page) => {
-        const id = ++c.latest, changes = c.changes;
+        const id = ++c.latest, changes = c.changes, saving = c.pending > 0;
         if (!SP.usesRealData()) return update(c, c.sample(c.settings, page));
         const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page) });
         return SP.api.get(`${c.api}?${query}`).then(next => {
-          if (id === c.latest) update(c, changes !== c.changes || c.pending ? { ...next, settings: c.settings } : next);
+          // A save pending at request start can land while the response is under way, so the
+          // response may carry the settings from before it even with nothing pending anymore.
+          if (id === c.latest) update(c, changes !== c.changes || saving || c.pending ? { ...next, settings: c.settings } : next);
         }, err => { if (id === c.latest) SP.toast(err.message); });
       };
       root.addEventListener("click", e => {
