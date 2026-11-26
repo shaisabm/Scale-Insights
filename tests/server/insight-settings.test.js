@@ -16,6 +16,13 @@ describe("cleanZeroSettings", () => {
     expect(settings).toMatchObject({ name: "Mine", track: ["impressions", "pl"], filters: { clicks: { min: 5 }, pl: { max: -10 } } });
   });
 
+  it("keeps a dragged column order, and none for settings saved before columns could move", () => {
+    expect(cleanZeroSettings(valid({ order: ["term", "p", "sp", "clicks", "impressions"] })).settings.order).toEqual(["term", "p", "sp", "clicks", "impressions"]);
+    const { order, ...older } = valid();
+    expect(order).toEqual([]);
+    expect(cleanZeroSettings(older).settings.order).toEqual([]);
+  });
+
   it("refuses bad names, sorts, numbers, reversed limits and unavailable metrics", () => {
     for (const [changes, message] of [
       [{ name: "" }, /name/],
@@ -32,6 +39,9 @@ describe("cleanZeroSettings", () => {
       [{ filters: { clicks: { min: 9, max: 3 } } }, /above its max/],
       [{ filters: { breakEvenBid: { min: 1 } } }, /can't be filtered/],
       [{ track: ["breakEvenBid"] }, /tracked/],
+      [{ order: "p,sp" }, /column order/],
+      [{ order: ["p", "nope"] }, /column order/],
+      [{ order: ["p", "p"] }, /column order/],
     ]) {
       expect(cleanZeroSettings(valid(changes)).error).toMatch(message);
     }

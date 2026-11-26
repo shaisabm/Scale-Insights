@@ -81,12 +81,56 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(saved).not.toBeNull());
     expect(saved).toEqual({
       name: "Wasted search terms", description: "Negate these.", showTracked: true, hideAsins: true, hideKeywords: true, sort: "clicks", dir: "asc",
-      filters: { clicks: { min: 5 }, orders: { max: 0 }, spend: { min: 10 } }, track: ["impressions", "clicks", "orders"],
+      filters: { clicks: { min: 5 }, orders: { max: 0 }, spend: { min: 10 } }, track: ["impressions", "clicks", "orders"], order: [],
     });
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Wasted search terms"));
     expect(document.querySelector(".modal-wrap")).toBeNull();
     expect(document.querySelector("[data-zero-card] footer").textContent).toBe("Negate these.");
     expect([...document.querySelectorAll("[data-zero-card] thead th")].map(th => th.textContent.replace(/[↓↑]/g, "").trim())).toEqual(["Product", "Sponsored", "Search term", "Impressions", "Clicks", "Orders"]);
+  });
+
+  it("lets column headers be dragged left or right, and saves the new order", async () => {
+    stubNavigation();
+    let saved = null;
+    const fetch = vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") saved = JSON.parse(init.body);
+      return new Response(JSON.stringify(init.method === "PUT" ? { settings: saved } : response(0)), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetch);
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const headers = () => [...document.querySelectorAll("[data-zero-card] thead th")];
+    const labels = () => headers().map(th => th.textContent.replace(/[↓↑]/g, "").trim());
+    const header = label => headers().find(th => th.textContent.includes(label));
+    // A drag as the browser sends it: start on one header, then over and onto another.
+    const drag = (from, to) => {
+      const data = new Map(), dataTransfer = { setData: (k, v) => data.set(k, v), getData: k => data.get(k), effectAllowed: "", dropEffect: "" };
+      const fire = (el, type) => el.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer }));
+      const source = header(from), target = header(to);
+      fire(source, "dragstart");
+      fire(target, "dragover");
+      fire(target, "drop");
+    };
+    expect(labels()).toEqual(["Product", "Sponsored", "Search term", "Impressions", "Clicks", "P&L"]);
+    expect(header("Clicks").getAttribute("draggable")).toBe("true");
+
+    // Dragged left onto Impressions, P&L lands before it, and its cells move with it.
+    drag("P&L", "Impressions");
+    expect(labels()).toEqual(["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"]);
+    expect([...document.querySelector("[data-zero-card] .sumrow").children].map(td => td.textContent.trim()).slice(3)).toEqual(["($75.35)", "11,222", "103"]);
+    await vi.waitFor(() => expect(saved?.order).toEqual(["p", "sp", "term", "pl", "impressions", "clicks"]));
+
+    // Dragged right onto Clicks, Product lands after it.
+    drag("Product", "Clicks");
+    expect(labels()).toEqual(["Sponsored", "Search term", "P&L", "Impressions", "Clicks", "Product"]);
+    await vi.waitFor(() => expect(saved.order).toEqual(["sp", "term", "pl", "impressions", "clicks", "p"]));
+
+    // Saving the Edit dialog keeps the order.
+    saved = null;
+    document.querySelector("[data-edit=st0]").click();
+    document.querySelector(".modal-wrap [data-ok]").click();
+    await vi.waitFor(() => expect(saved).not.toBeNull());
+    expect(saved.order).toEqual(["sp", "term", "pl", "impressions", "clicks", "p"]);
   });
 
   it("refuses a min above its max and keeps the dialog open", async () => {

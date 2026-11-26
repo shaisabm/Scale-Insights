@@ -69,7 +69,7 @@
     ["roas", "ROAS", "ROAS", v => v.toFixed(2)], ["spend", "Spend", "Spend", money], ["sales", "Sales", "Sales", money], ["pl", "P&L", "P&amp;L", pl], ["breakEvenBid", "Break even bid", "Break even bid", money],
   ];
   const UNAVAILABLE = new Set(["breakEvenBid"]);
-  const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"] };
+  const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"], order: [] };
   const zeroDefaults = () => JSON.parse(JSON.stringify(ZERO_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
@@ -129,10 +129,16 @@
   };
   // These read as "nothing" when they're 0 (as on most rows of this card), so they're left blank then.
   const BLANK_ZERO = new Set(["orders", "units", "sales", "conversion", "acos", "roas"]);
-  const zeroCols = s => [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
-    ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
+  // Columns follow the order their headers were dragged into (settings.order); any it doesn't
+  // list, such as a metric tracked later, keep their usual order after the ones it does.
+  const zeroCols = s => {
+    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
+      ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
+    const order = s.order || [], rank = c => (order.includes(c.key) ? order.indexOf(c.key) : order.length);
+    return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
+  };
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
-  const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
+  const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   const zeroEdit = s => {
     const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
     const rows = ZERO_METRICS.map(([k, label]) => {
@@ -210,8 +216,10 @@
         if (ed?.dataset.edit === "st0") {
           // Real data saves the settings to the account; sample data keeps them for this page.
           const dialog = SP.modal(`Edit ${SP.esc(settings.name)}`, zeroEdit(settings), m => {
-            const { settings: next, error } = readZeroEdit(m);
+            const { settings: read, error } = readZeroEdit(m);
             if (error) { SP.toast(error); return false; }
+            // The dialog doesn't show the column order, so saving keeps it.
+            const next = { ...read, order: settings.order || [] };
             if (!SP.usesRealData()) { settings = next; fetchPage(0); return; }
             SP.api.put("/api/ads/zero-sales-settings", next).then(saved => { settings = saved.settings || next; m.remove(); fetchPage(0); }, err => SP.toast(err.message));
             return false;
@@ -226,6 +234,14 @@
       root.addEventListener("rangechange", e => {
         range = { from: e.detail.from, to: e.detail.to };
         fetchPage(0);
+      });
+      // A dragged header redraws the card with its new column order, then saves it with the card's
+      // settings (to the account with real data, for this page with sample data).
+      root.addEventListener("gridreorder", e => {
+        if (e.detail.id !== "i1") return;
+        settings = { ...settings, order: e.detail.keys };
+        update({ ...current, settings });
+        if (SP.usesRealData()) SP.api.put("/api/ads/zero-sales-settings", settings).catch(err => SP.toast(err.message));
       });
       // A shared ad group's product panel is fixed to the page beside the photo (CSS shows it), so the
       // table's scrolling wrapper can't clip it. It goes on the right, or the left if there's no room.

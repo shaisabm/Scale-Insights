@@ -125,6 +125,9 @@ table.grid { border-collapse: collapse; width: 100%; font-size: .9375rem; }
 .grid td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .grid td.r { text-align: right; white-space: nowrap; }
 .grid tr.sumrow td { background: #f7f8f9; font-weight: 600; }
+.grid th[draggable="true"] { cursor: grab; }
+.grid th.gcol-before { box-shadow: inset 3px 0 0 var(--link); }
+.grid th.gcol-after { box-shadow: inset -3px 0 0 var(--link); }
 .grid tr.grow td { font-size: .875rem; }
 .grid tr.empty td { text-align: center; color: var(--body); padding: 16px; }
 .grid tr.detrow td { background: #fafbfc; }

@@ -315,6 +315,8 @@
 
   // ---------- Data grid ----------
   // cols: {key,label,align('l'|'r'|'c'),muted,sort,filter,fmt(v,row),w,group}
+  // With `reorder`, headers can be dragged left or right; a drop fires a bubbling "gridreorder"
+  // event with { id, keys } (the visible column keys in their new order) for the page to apply.
   const grids = (SP._grids = {});
   let gid = 0;
   SP.grid = cfg => {
@@ -339,7 +341,7 @@
     const th = c => {
       const sorted = g.sortKey === c.key;
       const tools = c.muted ? "" : `<span class="th-tools">${c.sort === false ? "" : `<span class="arr ${sorted ? "on" : ""}">${sorted && g.dir > 0 ? "↑" : "↓"}</span>`}${c.filter ? SP.svg(I.funnel, "fun") : ""}</span>`;
-      return `<th class="${c.align || "l"} ${c.muted ? "muted" : ""} ${sorted ? "sorted" : ""}" ${c.sort === false || c.muted ? "" : `data-gsort="${c.key}"`} style="${c.w ? `min-width:${c.w}px` : ""}">${c.label}${tools}</th>`;
+      return `<th class="${c.align || "l"} ${c.muted ? "muted" : ""} ${sorted ? "sorted" : ""}" ${c.sort === false || c.muted ? "" : `data-gsort="${c.key}"`}${g.reorder ? ` draggable="true" data-gcol="${c.key}"` : ""} style="${c.w ? `min-width:${c.w}px` : ""}">${c.label}${tools}</th>`;
     };
     return `<thead>${top}<tr>${g.check ? `<th class="c"><input type="checkbox" data-gall aria-label="Select all"></th>` : ""}${g.details ? `<th class="l muted">Details</th>` : ""}${cols.map(th).join("")}</tr></thead>`;
   }
@@ -538,6 +540,41 @@
       const ext = t.closest("a[href='#']");
       if (ext) e.preventDefault();
     });
+    // Dragging a header of a `reorder` grid onto another moves its column there: before the target
+    // when dragged left, after it when dragged right.
+    let dragged = null;
+    const dropOn = e => {
+      const th = e.target.closest?.("th[data-gcol]");
+      return dragged && th && th !== dragged && th.closest("[data-grid]") === dragged.closest("[data-grid]") ? th : null;
+    };
+    const clearMarks = () => SP.$$(".gcol-before, .gcol-after", root).forEach(th => th.classList.remove("gcol-before", "gcol-after"));
+    root.addEventListener("dragstart", e => {
+      const th = e.target.closest?.("th[data-gcol]");
+      if (!th) return;
+      dragged = th;
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", th.dataset.gcol); }
+    });
+    root.addEventListener("dragover", e => {
+      const th = dropOn(e);
+      if (!th) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const cells = [...th.parentElement.children], right = cells.indexOf(dragged) < cells.indexOf(th);
+      clearMarks();
+      th.classList.add(right ? "gcol-after" : "gcol-before");
+    });
+    root.addEventListener("drop", e => {
+      const th = dropOn(e);
+      if (!th) return;
+      e.preventDefault();
+      const table = th.closest("[data-grid]"), g = grids[table.dataset.grid];
+      const keys = visCols(g).map(c => c.key), from = keys.indexOf(dragged.dataset.gcol);
+      keys.splice(keys.indexOf(th.dataset.gcol), 0, ...keys.splice(from, 1));
+      dragged = null;
+      clearMarks();
+      table.dispatchEvent(new CustomEvent("gridreorder", { bubbles: true, detail: { id: g.id, keys } }));
+    });
+    root.addEventListener("dragend", () => { dragged = null; clearMarks(); });
     root.addEventListener("input", e => {
       const s = e.target.closest("[data-gsearch]");
       if (s) { const g = grids[s.dataset.gsearch]; g.q = s.value; g.page = 0; SP.refreshGrid(g.id); }
