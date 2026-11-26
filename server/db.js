@@ -78,17 +78,6 @@ const SCHEMA = [
     updated_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, asin)
   )`,
-  // Campaign and ad group names per ad type ('SP' or 'SB'), from the Ads API's read-only lists, so
-  // the search term cards can name each row's campaign and ad group.
-  `CREATE TABLE IF NOT EXISTS ads_names (
-    profile_id TEXT NOT NULL,
-    ad_product TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (profile_id, ad_product, kind, id)
-  )`,
   // When that history last finished updating (ready_at) and the last date it confirms
   // (ready_through), why the latest refresh failed, if it did, and where an unfinished ads list
   // carries on (next_token, from the list begun at scan_started_at). Search reports for the ad type
