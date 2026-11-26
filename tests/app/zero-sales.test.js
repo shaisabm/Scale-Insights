@@ -192,7 +192,8 @@ describe("Search Terms with 0 Sales card", () => {
     // The first product's photo at full size, a badge counting the others, and every product named.
     expect(multi.querySelector(":scope > img.zero-thumb").getAttribute("src")).toBe("/api/ads/product-image?asin=B0PRODUCTA");
     expect(multi.querySelector(".zero-count").textContent).toBe("+1");
-    expect(multi.getAttribute("aria-label")).toBe("Pink Ropes + B0PRODUCTB");
+    // Titles can repeat across variants, so each product is also named by its ASIN.
+    expect(multi.getAttribute("aria-label")).toBe("Pink Ropes (B0PRODUCTA) + B0PRODUCTB");
     expect(multi.getAttribute("tabindex")).toBe("0");
     // The hover panel shows each product's photo side by side, named by title and ASIN.
     const panel = multi.querySelector(".zero-pop");

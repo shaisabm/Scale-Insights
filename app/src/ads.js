@@ -96,7 +96,8 @@
   const zeroPhoto = (x, cls) => x.image ? `<img class="${cls}" src="${SP.esc(x.image)}" alt="" loading="lazy">` : `<span class="${cls} zero-none" aria-hidden="true">▣</span>`;
   const zeroProduct = (p, r) => {
     if (r.products.length > 1) {
-      const names = r.products.map(x => x.title || x.asin).join(" + ");
+      // Variants can share a title, so the label names each product by its ASIN too.
+      const names = r.products.map(x => (x.title ? `${x.title} (${x.asin})` : x.asin)).join(" + ");
       const panel = r.products.map(x => `<figure>${zeroPhoto(x, "zero-pop-img")}<figcaption>${x.title ? `<span class="clamp2">${SP.esc(x.title)}</span>` : ""}<small>${SP.esc(x.asin)}</small></figcaption></figure>`).join("");
       return `<span class="zero-multi" data-zero-multi tabindex="0" role="img" aria-label="${SP.esc(names)}">${zeroPhoto(r.products[0], "zero-thumb")}<span class="zero-count" aria-hidden="true">+${r.products.length - 1}</span><span class="zero-pop" aria-hidden="true">${panel}</span></span>`;
     }

@@ -63,6 +63,9 @@ describe("search term reports", () => {
     expect(second.rows.map(r => r.term)).toEqual(["term 7", "brand term"]);
     expect(second.rows[1].pl).toBeNull();
     expect(second.totals).toMatchObject({ impressions: 200, clicks: 20, pl: -23 });
+    // A page past the end (say, results shrank after a sync) gives the last page, so the pager stays.
+    const beyond = await zeroSales(db, { profileId, from, to, page: 5 });
+    expect([beyond.page, beyond.rows.map(r => r.term)]).toEqual([1, ["term 7", "brand term"]]);
     expect((await db.execute("SELECT COUNT(*) AS n FROM ads_daily")).rows[0].n).toBe(2);
   });
 

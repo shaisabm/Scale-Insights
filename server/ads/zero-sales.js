@@ -86,7 +86,10 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   };
   matched.sort((a, b) => byMetric(a, b) || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || a.asin.localeCompare(b.asin));
   const total = matched.length;
-  const shown = matched.slice(page * pageSize, (page + 1) * pageSize);
+  // A page past the end (the results shrank since it was asked for, after a sync say) gives the
+  // last page instead, so the card keeps its rows and pager.
+  const at = Math.min(page, Math.max(0, Math.ceil(total / pageSize) - 1));
+  const shown = matched.slice(at * pageSize, (at + 1) * pageSize);
   // Images are served by /api/ads/product-image, which fetches them from Amazon on the server.
   // title and image are the first product's; `products` lists every product the row names.
   const rows = shown.map(r => {
@@ -117,5 +120,5 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     const days = synced.rows.filter(r => r.ad_product === k && r.date >= start && r.date <= end).length;
     coverage[k] = { days, expectedDays: dayCount(start, end), pending: waiting.has(k), availableFrom, reportedThrough, unattributedSpend: cents(unattributed[k]), ...(k === "SB_SEARCH" ? { mapReady: Boolean(sbThrough) && (start > end || sbThrough >= end) } : {}) };
   }
-  return { from, to, page, pageSize, total, totals, rows, coverage, settings };
+  return { from, to, page: at, pageSize, total, totals, rows, coverage, settings };
 }
