@@ -202,10 +202,12 @@
       // Settings are saved whole, so saves run one at a time: each starts once the one before has
       // finished and sends the settings as they are then, so it carries every change made before it
       // (a dialog's name and a dragged column order alike) and the last one is what's stored.
-      let saving = Promise.resolve(), pendingSaves = 0, settingsChanges = 0;
+      let saving = Promise.resolve(), pendingSaves = 0, settingsChanges = 0, editSubmits = 0;
+      // What the account last accepted, which a refused dialog save falls back to.
+      let accepted = settings;
       const saveSettings = () => {
         pendingSaves++;
-        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", settings));
+        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", settings)).then(saved => { accepted = saved.settings || accepted; return saved; });
         saving = request.catch(() => {}).finally(() => { pendingSaves--; });
         return request;
       };
@@ -233,12 +235,18 @@
             // The dialog doesn't show the column order, so saving keeps it.
             const next = { ...read, order: settings.order || [] };
             if (!SP.usesRealData()) { settings = next; fetchPage(0); return; }
-            // Applied here first, so a save made meanwhile includes it; a refused save puts the
-            // dialog's fields back as they were and keeps any newer column order.
-            const before = settings;
+            // Applied here first, so a save made meanwhile includes it. If the account refuses it and
+            // nothing was submitted from the dialog since, its fields go back to what the account last
+            // accepted (a later submit carries them all again); the column order stays either way, and
+            // the card is redrawn in case a page load showed the edit meanwhile.
+            const submit = ++editSubmits;
             settings = next;
             settingsChanges++;
-            saveSettings().then(() => { m.remove(); fetchPage(0); }, err => { settings = { ...before, order: settings.order }; SP.toast(err.message); });
+            saveSettings().then(() => { m.remove(); fetchPage(0); }, err => {
+              if (submit === editSubmits) settings = { ...accepted, order: settings.order };
+              update({ ...current, settings });
+              SP.toast(err.message);
+            });
             return false;
           });
           $("[data-z=sort]", dialog).value = `${settings.sort}:${settings.dir}`;

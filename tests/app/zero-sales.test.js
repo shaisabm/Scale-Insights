@@ -236,6 +236,56 @@ describe("Search Terms with 0 Sales card", () => {
     expect([bodies[1].name, bodies[1].order]).toEqual(["Search Terms with 0 Sales", ["p", "sp", "term", "pl", "impressions", "clicks"]]);
   });
 
+  it("redraws the card without a refused edit that a page load showed meanwhile", async () => {
+    stubNavigation();
+    const page = later(), save = later();
+    let loads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return save.promise;
+      return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : page.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const title = () => document.querySelector("[data-zero-card] h3").textContent;
+    document.querySelector("[data-zero-card] [data-zero-next]").click();
+    document.querySelector("[data-edit=st0]").click();
+    document.querySelector(".modal-wrap [data-z=name]").value = "Refused";
+    document.querySelector(".modal-wrap [data-ok]").click();
+    // Page 2 arrives while the save is still going, so it shows the edit.
+    page.resolve(json({ ...response(1), settings: savedSettings([]) }));
+    await vi.waitFor(() => expect(title()).toBe("Refused"));
+    save.resolve(new Response(JSON.stringify({ error: "Choose a sort order from the list." }), { status: 400, headers: { "Content-Type": "application/json" } }));
+    await vi.waitFor(() => expect(title()).toBe("Search Terms with 0 Sales"));
+    expect(document.querySelector("#toast").textContent).toBe("Choose a sort order from the list.");
+  });
+
+  it("stores a second edit when the first one's save is refused", async () => {
+    stubNavigation();
+    const saves = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method !== "PUT") return json({ ...response(0), settings: savedSettings([]) });
+      const reply = later();
+      saves.push({ body: JSON.parse(init.body), reply });
+      return reply.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    document.querySelector("[data-edit=st0]").click();
+    const field = sel => document.querySelector(`.modal-wrap ${sel}`);
+    field("[data-z=name]").value = "First";
+    field("[data-ok]").click();
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    // The dialog stays open while its save goes, so it can be saved again.
+    field("[data-z=name]").value = "Second";
+    field("[data-z=description]").value = "Two";
+    field("[data-ok]").click();
+    saves[0].reply.resolve(new Response(JSON.stringify({ error: "Choose a sort order from the list." }), { status: 400, headers: { "Content-Type": "application/json" } }));
+    await vi.waitFor(() => expect(saves).toHaveLength(2));
+    expect([saves[1].body.name, saves[1].body.description]).toEqual(["Second", "Two"]);
+    saves[1].reply.resolve(json({ settings: saves[1].body }));
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Second"));
+  });
+
   it("refuses a min above its max and keeps the dialog open", async () => {
     stubNavigation();
     const fetch = vi.fn(async () => new Response(JSON.stringify(response(0)), { status: 200, headers: { "Content-Type": "application/json" } }));
