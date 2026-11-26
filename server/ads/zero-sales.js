@@ -1,7 +1,21 @@
 import { migrate } from "../db.js";
-import { addDays } from "../http.js";
+import { addDays, isoDate, todayIn } from "../http.js";
 import { ZERO_DEFAULTS } from "./insight-settings.js";
 import { REPORTS } from "./sync.js";
+
+// The shared query for the search term insight cards: from/to dates (or days=7|14|30, ending
+// yesterday; the default is the last 30 days) and page. `today` is the profile's date.
+export function insightQuery(params, timeZone = process.env.AMAZON_ADS_TIME_ZONE || "America/Los_Angeles") {
+  const today = todayIn(timeZone);
+  const days = Number(params.get("days") || 30);
+  const to = params.has("to") ? isoDate(params.get("to")) : addDays(today, -1);
+  const from = params.has("from") ? isoDate(params.get("from")) : to && [7, 14, 30].includes(days) ? isoDate(addDays(to, -days + 1)) : null;
+  const page = Number(params.get("page") || 0);
+  // At most 400 dates, counting both ends.
+  const badRange = !from || !to || from > to || to > today || to > addDays(from, 399);
+  if (badRange || !Number.isSafeInteger(page) || page < 0 || page > 10000) return null;
+  return { from, to, today, page };
+}
 
 const cents = value => Math.round(Number(value || 0) * 100) / 100;
 const asinPattern = /^B0[A-Z0-9]{8}$/i;

@@ -58,7 +58,7 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const card = (title, body, tip, id) => `<section class="icard" ${id === "st0" ? "data-zero-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button>${id === "st0" ? "" : `<a href="${{ acos: "/Ads/SearchTerms", perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a>`}</header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
+  const card = (title, body, tip, id) => `<section class="icard" ${id === "st0" ? "data-zero-card" : id === "acos" ? "data-hacos-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button>${id === "st0" || id === "acos" ? "" : `<a href="${{ perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a>`}</header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
   // The card's metrics as [key, label, column heading, format], matching the API's. Break even bid
@@ -70,25 +70,40 @@
   ];
   const UNAVAILABLE = new Set(["breakEvenBid"]);
   const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"], order: [] };
+  // The High ACOS card runs the same machinery with its own defaults: ACOS at 50% and up, worst first.
+  const HIGH_ACOS_DEFAULTS = { name: "Search Terms with High ACOS", description: "[Tip]: Use [Automation] strategies to improve your advertising results.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "acos", dir: "desc", filters: { acos: { min: 50 } }, track: ["impressions", "clicks", "sales", "acos"], order: [] };
   const zeroDefaults = () => JSON.parse(JSON.stringify(ZERO_DEFAULTS));
+  const acosDefaults = () => JSON.parse(JSON.stringify(HIGH_ACOS_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
-  function sampleZero(settings = zeroDefaults(), page = 0) {
-    const all = TERMS.map(([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null }))
+  const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
+  // High ACOS sample rows as [term, impressions, clicks, spend, sales, orders]; the last two sit
+  // below the card's default 50% filter, and one is an ASIN, so each setting has something to do.
+  const ACOS_TERMS = [
+    ["weighted jump rope", 4200, 55, 52.31, 35.9, 3], ["jump rope for men", 3100, 38, 30.12, 27.3, 2], ["speed jump rope", 2600, 44, 31.87, 30.1, 2],
+    ["B0JUMP99XY", 1500, 22, 21.4, 12.99, 1], ["adjustable jump rope", 5300, 61, 41.2, 49.5, 4], ["fitness rope", 1200, 15, 12.75, 14.2, 1],
+    ["boxing jump rope", 900, 12, 10.8, 9.99, 1], ["jump rope workout", 2000, 25, 19.5, 26.4, 2], ["rope skipping", 800, 10, 7.9, 8.5, 1],
+    ["jump rope for kids", 3400, 30, 8.2, 25.0, 3], ["leather jump rope", 1100, 14, 5.5, 22.0, 2],
+  ];
+  const acosRow = ([term, impressions, clicks, spend, sales, orders], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100, conversion: (orders / clicks) * 100, acos: (spend / sales) * 100, roas: sales / spend, pl: sales - spend, breakEvenBid: null });
+  function sampleInsight(rows, settings, page) {
+    const all = rows
       .filter(r => Object.entries(settings.filters).every(([k, f]) => r[k] != null && (f.min == null || r[k] >= f.min) && (f.max == null || r[k] <= f.max))
         && !(settings.hideAsins && asinTerm.test(r.term)) && !(settings.hideKeywords && !asinTerm.test(r.term)))
       .sort((a, b) => {
         const x = a[settings.sort], y = b[settings.sort];
         return x == null || y == null ? Number(x == null) - Number(y == null) : (Number(x) - Number(y)) * (settings.dir === "asc" ? 1 : -1);
       });
-    const rows = all.slice(page * 7, page * 7 + 7), sum = k => rows.reduce((n, r) => n + r[k], 0);
-    const spend = sum("spend"), clicks = sum("clicks"), impressions = sum("impressions");
+    const rowsPage = all.slice(page * 7, page * 7 + 7), sum = k => rowsPage.reduce((n, r) => n + r[k], 0);
+    const spend = sum("spend"), clicks = sum("clicks"), impressions = sum("impressions"), orders = sum("orders"), sales = sum("sales");
     return {
-      page, pageSize: 7, total: all.length, rows, settings,
-      totals: { impressions, clicks, orders: 0, units: 0, spend, sales: 0, cpc: clicks ? spend / clicks : null, ctr: impressions ? (clicks / impressions) * 100 : null, conversion: clicks ? 0 : null, acos: null, roas: spend ? 0 : null, pl: sum("pl"), breakEvenBid: null },
+      page, pageSize: 7, total: all.length, rows: rowsPage, settings,
+      totals: { impressions, clicks, orders, units: sum("units"), spend, sales, cpc: clicks ? spend / clicks : null, ctr: impressions ? (clicks / impressions) * 100 : null, conversion: clicks ? (orders / clicks) * 100 : null, acos: sales ? (spend / sales) * 100 : null, roas: spend ? sales / spend : null, pl: sum("pl"), breakEvenBid: null },
       coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
     };
   }
+  const sampleZero = (settings = zeroDefaults(), page = 0) => sampleInsight(TERMS.map(zeroRow), settings, page);
+  const sampleAcos = (settings = acosDefaults(), page = 0) => sampleInsight(ACOS_TERMS.map(acosRow), settings, page);
   const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
   // A row naming several products (an ad group advertising them all) shows the first one's photo with
@@ -138,7 +153,7 @@
     return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
   };
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
-  const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
+  const zeroBody = (data, s, id) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   const zeroEdit = s => {
     const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
     const rows = ZERO_METRICS.map(([k, label]) => {
@@ -165,15 +180,14 @@
   SP.pages["/Ads"] = {
     title: "Insights overview",
     load: () => {
-      if (!SP.usesRealData()) return Promise.resolve(sampleZero());
-      const r = SP.rangeFor("Last 30 Days");
-      return SP.api.get(`/api/ads/zero-sales?${new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" })}`);
+      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos() });
+      const r = SP.rangeFor("Last 30 Days"), q = new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" });
+      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`)]).then(([st0, acos]) => ({ st0, acos }));
     },
     render(data) {
-      const zs = data.settings || zeroDefaults();
-      const c1 = zeroBody(data, zs);
-      const c2 = SP.grid({ id: "i2", search: false, noFoot: true, cls: "fit", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "clicks", label: "Clicks", align: "r" }, { key: "spend", label: "Spend", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "conv", label: "Conversion", align: "r", fmt: v => pct(v) }, { key: "acos", label: "ACOS", align: "r", fmt: v => pct(v) }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
-        rows: [{ p: P[0], sp: "Products", term: "cordless jump rope", clicks: 28, spend: 25.87, cpc: 0.92, conv: 3.57, acos: 123.25, pl: -24.8 }], sum: rs => ({ ...rs[0], p: null, sp: null, term: null }) });
+      const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults();
+      const c1 = zeroBody(data.st0, zs, "i1");
+      const c2 = zeroBody(data.acos, as, "i2");
       const c3 = SP.grid({ id: "i3", search: false, emptyFoot: false, cls: "fit", empty: "No results found", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "orders", label: "Orders", align: "r" }, { key: "spend", label: "Spend", align: "r" }, { key: "cpc", label: "CPC", align: "r" }, { key: "conv", label: "Conversion", align: "r" }, { key: "acos", label: "ACOS", align: "r" }, { key: "pl", label: "P&amp;L", align: "r" }], rows: [] });
       const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
@@ -181,93 +195,106 @@
       const waitingCard = title => `<section class="icard"><header><h3>${title}</h3></header><div class="icard-body"><p>Live data for this insight is not connected yet.</p></div></section>`;
       const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
         ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0")}
-        ${SP.usesRealData() ? ["Search Terms with High ACOS", "Performing Search Terms", "Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Search Terms with High ACOS", c2, "[Tip]: Use [Automation] strategies to improve your advertising results.", "acos")}${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
+        ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos")}
+        ${SP.usesRealData() ? ["Performing Search Terms", "Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
     wire(root, data) {
-      let current = data;
       const initial = SP.rangeFor("Last 30 Days");
-      let range = { from: data.from || SP.iso(initial.from), to: data.to || SP.iso(initial.to) };
-      let settings = data.settings || zeroDefaults();
-      const zeroCard = $("[data-zero-card]", root);
+      let range = { from: data.st0.from || SP.iso(initial.from), to: data.st0.to || SP.iso(initial.to) };
+      // The two search term cards run the same machinery against their own endpoint and settings.
+      const cards = {
+        st0: { key: "st0", sel: "[data-zero-card]", grid: "i1", api: "/api/ads/zero-sales", saveApi: "/api/ads/zero-sales-settings", defaults: zeroDefaults, sample: sampleZero },
+        acos: { key: "acos", sel: "[data-hacos-card]", grid: "i2", api: "/api/ads/high-acos", saveApi: "/api/ads/high-acos-settings", defaults: acosDefaults, sample: sampleAcos },
+      };
+      for (const c of Object.values(cards)) {
+        c.el = $(c.sel, root);
+        c.current = data[c.key];
+        c.settings = c.current.settings || c.defaults();
+        c.changes = 0; c.latest = 0; c.pending = 0; c.submits = 0; c.saving = Promise.resolve();
+        // What the account last accepted, which a refused dialog save falls back to.
+        c.accepted = c.settings;
+      }
       // Settings can change the columns, so the whole card is redrawn.
-      const update = next => {
-        current = next;
-        if (next.settings) settings = next.settings;
-        $("h3", zeroCard).textContent = settings.name;
-        $("footer", zeroCard).textContent = settings.description;
-        $(".icard-body", zeroCard).innerHTML = zeroBody(next, settings);
+      const update = (c, next) => {
+        c.current = next;
+        if (next.settings) c.settings = next.settings;
+        $("h3", c.el).textContent = c.settings.name;
+        $("footer", c.el).textContent = c.settings.description;
+        $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid);
       };
       // Settings are saved whole, so saves run one at a time: each starts once the one before has
       // finished and sends the settings as they are then, so it carries every change made before it
       // (a dialog's name and a dragged column order alike) and the last one is what's stored.
-      let saving = Promise.resolve(), pendingSaves = 0, settingsChanges = 0, editSubmits = 0;
-      // What the account last accepted, which a refused dialog save falls back to.
-      let accepted = settings;
-      const saveSettings = () => {
-        pendingSaves++;
-        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", settings)).then(saved => { accepted = saved.settings || accepted; return saved; });
-        saving = request.catch(() => {}).finally(() => { pendingSaves--; });
+      const saveSettings = c => {
+        c.pending++;
+        const request = c.saving.then(() => SP.api.put(c.saveApi, c.settings)).then(saved => { c.accepted = saved.settings || c.accepted; return saved; });
+        c.saving = request.catch(() => {}).finally(() => { c.pending--; });
         return request;
       };
       // Each request gets a number; only the latest one may update the panel, so a slower,
       // superseded response can't replace newer results. A response that began before a local
       // settings change, or arrives while a save is still going, may carry older settings, so the
       // local ones are kept then.
-      let latest = 0;
-      const fetchPage = async page => {
-        const id = ++latest, changes = settingsChanges;
-        if (!SP.usesRealData()) return update(sampleZero(settings, page));
-        try {
-          const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page) });
-          const next = await SP.api.get(`/api/ads/zero-sales?${query}`);
-          if (id === latest) update(changes !== settingsChanges || pendingSaves ? { ...next, settings } : next);
-        } catch (err) { if (id === latest) SP.toast(err.message); }
+      const fetchPage = (c, page) => {
+        const id = ++c.latest, changes = c.changes;
+        if (!SP.usesRealData()) return update(c, c.sample(c.settings, page));
+        const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page) });
+        return SP.api.get(`${c.api}?${query}`).then(next => {
+          if (id === c.latest) update(c, changes !== c.changes || c.pending ? { ...next, settings: c.settings } : next);
+        }, err => { if (id === c.latest) SP.toast(err.message); });
       };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");
-        if (ed?.dataset.edit === "st0") {
+        if (ed && cards[ed.dataset.edit]) {
+          const c = cards[ed.dataset.edit];
           // Real data saves the settings to the account; sample data keeps them for this page.
-          const dialog = SP.modal(`Edit ${SP.esc(settings.name)}`, zeroEdit(settings), m => {
+          const dialog = SP.modal(`Edit ${SP.esc(c.settings.name)}`, zeroEdit(c.settings), m => {
             const { settings: read, error } = readZeroEdit(m);
             if (error) { SP.toast(error); return false; }
             // The dialog doesn't show the column order, so saving keeps it.
-            const next = { ...read, order: settings.order || [] };
-            if (!SP.usesRealData()) { settings = next; fetchPage(0); return; }
+            const next = { ...read, order: c.settings.order || [] };
+            if (!SP.usesRealData()) { c.settings = next; fetchPage(c, 0); return; }
             // Applied here first, so a save made meanwhile includes it. If the account refuses it and
             // nothing was submitted from the dialog since, its fields go back to what the account last
             // accepted (a later submit carries them all again); the column order stays either way, and
             // the card is redrawn in case a page load showed the edit meanwhile.
-            const submit = ++editSubmits;
-            settings = next;
-            settingsChanges++;
-            saveSettings().then(() => { m.remove(); fetchPage(0); }, err => {
-              if (submit === editSubmits) settings = { ...accepted, order: settings.order };
-              update({ ...current, settings });
+            const submit = ++c.submits;
+            c.settings = next;
+            c.changes++;
+            saveSettings(c).then(() => { m.remove(); fetchPage(c, 0); }, err => {
+              if (submit === c.submits) c.settings = { ...c.accepted, order: c.settings.order };
+              update(c, { ...c.current, settings: c.settings });
               SP.toast(err.message);
             });
             return false;
           });
-          $("[data-z=sort]", dialog).value = `${settings.sort}:${settings.dir}`;
+          $("[data-z=sort]", dialog).value = `${c.settings.sort}:${c.settings.dir}`;
         } else if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
-        if (e.target.closest("[data-zero-next]")) fetchPage(current.page + 1);
-        if (e.target.closest("[data-zero-prev]")) fetchPage(current.page - 1);
-        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(current.page)).catch(err => SP.toast(err.message));
-        if (e.target.closest("[data-apply]")) fetchPage(0);
+        // The pager and sync button act on the card they sit in.
+        const host = e.target.closest("[data-zero-card],[data-hacos-card]");
+        const c = host && Object.values(cards).find(x => host.matches(x.sel));
+        if (c) {
+          if (e.target.closest("[data-zero-next]")) fetchPage(c, c.current.page + 1);
+          if (e.target.closest("[data-zero-prev]")) fetchPage(c, c.current.page - 1);
+          if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(c, c.current.page)).catch(err => SP.toast(err.message));
+        }
+        if (e.target.closest("[data-apply]")) Object.values(cards).forEach(x => fetchPage(x, 0));
       });
       root.addEventListener("rangechange", e => {
         range = { from: e.detail.from, to: e.detail.to };
-        fetchPage(0);
+        Object.values(cards).forEach(c => fetchPage(c, 0));
       });
       // A dragged header redraws the card with its new column order, then saves it with the card's
       // settings (to the account with real data, for this page with sample data).
       root.addEventListener("gridreorder", e => {
-        if (e.detail.id !== "i1") return;
-        settings = { ...settings, order: e.detail.keys };
-        settingsChanges++;
-        update({ ...current, settings });
-        if (SP.usesRealData()) saveSettings().catch(err => SP.toast(err.message));
+        const c = Object.values(cards).find(x => x.grid === e.detail.id);
+        if (!c) return;
+        c.settings = { ...c.settings, order: e.detail.keys };
+        c.changes++;
+        update(c, { ...c.current, settings: c.settings });
+        if (SP.usesRealData()) saveSettings(c).catch(err => SP.toast(err.message));
       });
       // A shared ad group's product panel is fixed to the page beside the photo (CSS shows it), so the
       // table's scrolling wrapper can't clip it. It goes on the right, or the left if there's no room.

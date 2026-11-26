@@ -149,6 +149,8 @@ describe("Search Terms with 0 Sales card", () => {
     let loads = 0;
     vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
       if (init.method === "PUT") return json({ settings: JSON.parse(init.body) });
+      // Only the zero-sales card's loads are choreographed; the other card's resolve at once.
+      if (!String(url).includes("/api/ads/zero-sales")) return json(response(0));
       // The first load answers at once; the second waits until the test releases it.
       return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : pending.promise;
     }));
@@ -242,6 +244,7 @@ describe("Search Terms with 0 Sales card", () => {
     let loads = 0;
     vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
       if (init.method === "PUT") return save.promise;
+      if (!String(url).includes("/api/ads/zero-sales")) return json(response(0));
       return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : page.promise;
     }));
     openApp("/Ads");
@@ -336,7 +339,11 @@ describe("Search Terms with 0 Sales card", () => {
     stubNavigation();
     const replies = [];
     const json = body => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(resolve => replies.push(body => resolve(json(body))))));
+    vi.stubGlobal("fetch", vi.fn(url => {
+      // Only the zero-sales card's loads are held for the test to release; the other card's resolve at once.
+      if (!String(url).includes("/api/ads/zero-sales")) return Promise.resolve(json(response(0)));
+      return new Promise(resolve => replies.push(body => resolve(json(body))));
+    }));
     const withTerm = term => ({ ...response(0), total: 1, rows: [{ term, sponsored: "Products", impressions: 1, clicks: 1, pl: -1 }] });
     const firstRow = () => document.querySelector("[data-zero-card] tbody tr:not(.sumrow)").textContent;
     openApp("/Ads");
