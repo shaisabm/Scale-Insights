@@ -181,6 +181,28 @@ describe("Search Terms with 0 Sales card", () => {
     expect(document.querySelector("[data-zero-card] .zero-product")).not.toBeNull();
   });
 
+  it("leaves Orders, Units, Sales, Conversion, ACOS and ROAS blank when they're 0", async () => {
+    stubNavigation();
+    // Tracked in the card's column order: clicks, orders, units, conversion, ACOS, ROAS, sales.
+    const track = ["clicks", "orders", "units", "conversion", "acos", "roas", "sales"];
+    const settings = { name: "Search Terms with 0 Sales", description: "", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: {}, track };
+    const zero = { clicks: 4, orders: 0, units: 0, conversion: 0, acos: 0, roas: 0, sales: 0 };
+    const body = { ...response(0), settings, total: 2, totals: zero, rows: [
+      { term: "no sales", sponsored: "Products", ...zero },
+      { term: "sold", sponsored: "Products", clicks: 10, orders: 2, units: 3, conversion: 20, acos: 25, roas: 4, sales: 40 },
+    ] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]")).not.toBeNull());
+    const card = document.querySelector("[data-zero-card]");
+    // The metric cells come after Product, Sponsored and Search term.
+    const metrics = tr => [...tr.children].slice(3).map(td => td.textContent.trim());
+    const [none, sold] = card.querySelectorAll("tbody tr[data-k]");
+    expect(metrics(none)).toEqual(["4", "", "", "", "", "", ""]);
+    expect(metrics(sold)).toEqual(["10", "2", "3", "20.00%", "25.00%", "4.00", "$40.00"]);
+    expect(metrics(card.querySelector(".sumrow"))).toEqual(["4", "", "", "", "", "", ""]);
+  });
+
   it("marks a shared ad group's row with a count badge, and shows every product's photo on hover", async () => {
     stubNavigation();
     const products = [{ asin: "B0PRODUCTA", title: "Pink Ropes", image: "/api/ads/product-image?asin=B0PRODUCTA" }, { asin: "B0PRODUCTB", title: "", image: null }];

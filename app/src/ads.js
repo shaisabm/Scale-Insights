@@ -127,8 +127,10 @@
       : "Search term reports are not fully synced.";
     return `<div class="zero-status" data-zero-status>${[reason, ...notes].join(" ")} <button class="link-btn" data-zero-sync>Sync now</button></div>`;
   };
+  // These read as "nothing" when they're 0 (as on most rows of this card), so they're left blank then.
+  const BLANK_ZERO = new Set(["orders", "units", "sales", "conversion", "acos", "roas"]);
   const zeroCols = s => [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
-    ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null ? "" : f(v)) }))];
+    ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
   const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   const zeroEdit = s => {
