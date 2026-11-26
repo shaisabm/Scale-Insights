@@ -58,34 +58,228 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const card = (title, body, tip, id) => `<section class="icard"><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${{ st0: "/Ads/SearchTerms", acos: "/Ads/SearchTerms", perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
+  const card = (title, body, tip, id) => `<section class="icard" ${id === "st0" ? "data-zero-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button>${id === "st0" ? "" : `<a href="${{ acos: "/Ads/SearchTerms", perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a>`}</header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
+
+  // The card's metrics as [key, label, column heading, format], matching the API's. Break even bid
+  // needs product costs, which aren't connected yet, so its filters and column stay disabled.
+  const ZERO_METRICS = [
+    ["impressions", "Impressions", "Impressions", int], ["clicks", "Clicks", "Clicks", int], ["orders", "Orders", "Orders", int], ["units", "Units", "Units", int],
+    ["cpc", "Cost per click", "CPC", money], ["ctr", "CTR %", "CTR", v => pct(v)], ["conversion", "Conversion %", "Conversion", v => pct(v)], ["acos", "ACOS %", "ACOS", v => pct(v)],
+    ["roas", "ROAS", "ROAS", v => v.toFixed(2)], ["spend", "Spend", "Spend", money], ["sales", "Sales", "Sales", money], ["pl", "P&L", "P&amp;L", pl], ["breakEvenBid", "Break even bid", "Break even bid", money],
+  ];
+  const UNAVAILABLE = new Set(["breakEvenBid"]);
+  const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"], order: [] };
+  const zeroDefaults = () => JSON.parse(JSON.stringify(ZERO_DEFAULTS));
+  const asinTerm = /^B0[A-Z0-9]{8}$/i;
+  // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
+  function sampleZero(settings = zeroDefaults(), page = 0) {
+    const all = TERMS.map(([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null }))
+      .filter(r => Object.entries(settings.filters).every(([k, f]) => r[k] != null && (f.min == null || r[k] >= f.min) && (f.max == null || r[k] <= f.max))
+        && !(settings.hideAsins && asinTerm.test(r.term)) && !(settings.hideKeywords && !asinTerm.test(r.term)))
+      .sort((a, b) => {
+        const x = a[settings.sort], y = b[settings.sort];
+        return x == null || y == null ? Number(x == null) - Number(y == null) : (Number(x) - Number(y)) * (settings.dir === "asc" ? 1 : -1);
+      });
+    const rows = all.slice(page * 7, page * 7 + 7), sum = k => rows.reduce((n, r) => n + r[k], 0);
+    const spend = sum("spend"), clicks = sum("clicks"), impressions = sum("impressions");
+    return {
+      page, pageSize: 7, total: all.length, rows, settings,
+      totals: { impressions, clicks, orders: 0, units: 0, spend, sales: 0, cpc: clicks ? spend / clicks : null, ctr: impressions ? (clicks / impressions) * 100 : null, conversion: clicks ? 0 : null, acos: null, roas: spend ? 0 : null, pl: sum("pl"), breakEvenBid: null },
+      coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
+    };
+  }
+  const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
+  // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
+  // A row naming several products (an ad group advertising them all) shows the first one's photo with
+  // a badge counting the rest; hovering or focusing it opens a panel with every product side by side.
+  const zeroPhoto = (x, cls) => x.image ? `<img class="${cls}" src="${SP.esc(x.image)}" alt="" loading="lazy">` : `<span class="${cls} zero-none" aria-hidden="true">▣</span>`;
+  const zeroProduct = (p, r) => {
+    if (r.products.length > 1) {
+      // Variants can share a title, so the label names each product by its ASIN too.
+      const names = r.products.map(x => (x.title ? `${x.title} (${x.asin})` : x.asin)).join(" + ");
+      const panel = r.products.map(x => `<figure>${zeroPhoto(x, "zero-pop-img")}<figcaption>${x.title ? `<span class="clamp2">${SP.esc(x.title)}</span>` : ""}<small>${SP.esc(x.asin)}</small></figcaption></figure>`).join("");
+      return `<span class="zero-multi" data-zero-multi tabindex="0" role="img" aria-label="${SP.esc(names)}">${zeroPhoto(r.products[0], "zero-thumb")}<span class="zero-count" aria-hidden="true">+${r.products.length - 1}</span><span class="zero-pop" aria-hidden="true">${panel}</span></span>`;
+    }
+    return r.image ? `<img class="zero-thumb" src="${SP.esc(r.image)}" alt="${SP.esc(r.title || r.asin)}" title="${SP.esc(r.title || r.asin)}" loading="lazy">`
+      : p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>`;
+  };
+  const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands" };
+  const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
+  const zeroPager = data => data.total > 7 ? `<div class="zero-pager" data-zero-pager><button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${Math.ceil(data.total / 7)}</span><button data-zero-next ${data.page >= Math.ceil(data.total / 7) - 1 ? "disabled" : ""}>Next ›</button></div>` : `<div class="zero-pager" data-zero-pager></div>`;
+  const zeroStatus = data => {
+    if (!SP.usesRealData()) return "";
+    const entries = Object.entries(data.coverage || {}), coverage = entries.map(([, c]) => c);
+    // Dates Amazon doesn't provide (older than it keeps, or not reported yet) are explained; a sync can't add them.
+    const notes = [];
+    const older = entries.filter(([, c]) => c.availableFrom && data.from < c.availableFrom);
+    if (older.length) notes.push(`Amazon only keeps recent search terms: ${older.map(([k, c]) => `${SEARCH_TYPES[k] || k} from ${day(c.availableFrom)}`).join(", ")}.`);
+    const reported = coverage.map(c => c.reportedThrough).filter(Boolean).sort()[0];
+    if (reported && data.to > reported) notes.push(`Amazon hasn't reported search terms after ${day(reported)} yet.`);
+    // Rows the server couldn't tie to the products advertised on their dates.
+    const unmatched = entries.filter(([, c]) => c.unattributedSpend > 0);
+    if (unmatched.length) notes.push(`${unmatched.map(([k, c]) => `${SP.money(c.unattributedSpend)} of ${SEARCH_TYPES[k] || k} spend`).join(" and ")} can't be matched to the products it advertised on its dates, so its search terms are left out.`);
+    // Synced days only count once the products they belong to can be matched (mapReady).
+    const incomplete = !coverage.length || coverage.some(c => c.days < c.expectedDays || c.mapReady === false);
+    if (!incomplete) return notes.length ? `<div class="zero-status" data-zero-status>${notes.join(" ")}</div>` : "";
+    const reason = coverage.some(c => c.pending) ? "Search term reports are still being prepared."
+      : coverage.some(c => c.mapReady === false) && coverage.every(c => c.days >= c.expectedDays) ? "Sponsored Brands search terms can't be matched to products yet."
+      : "Search term reports are not fully synced.";
+    return `<div class="zero-status" data-zero-status>${[reason, ...notes].join(" ")} <button class="link-btn" data-zero-sync>Sync now</button></div>`;
+  };
+  // These read as "nothing" when they're 0 (as on most rows of this card), so they're left blank then.
+  const BLANK_ZERO = new Set(["orders", "units", "sales", "conversion", "acos", "roas"]);
+  // Columns follow the order their headers were dragged into (settings.order); any it doesn't
+  // list, such as a metric tracked later, keep their usual order after the ones it does.
+  const zeroCols = s => {
+    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
+      ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
+    const order = s.order || [], rank = c => (order.includes(c.key) ? order.indexOf(c.key) : order.length);
+    return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
+  };
+  // The pager is the table's last row, so it sits right under the totals at the table's right edge.
+  const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
+  const zeroEdit = s => {
+    const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
+    const rows = ZERO_METRICS.map(([k, label]) => {
+      const off = UNAVAILABLE.has(k) ? ` disabled title="Needs product costs, which aren't connected yet."` : "", f = s.filters[k] || {};
+      return `<tr><th>${SP.esc(label)}</th><td><input type="number" step="any" data-min="${k}" value="${f.min ?? ""}"${off}></td><td><input type="number" step="any" data-max="${k}" value="${f.max ?? ""}"${off}></td><td><input type="checkbox" data-track="${k}" ${s.track.includes(k) ? "checked" : ""}${off}></td></tr>`;
+    }).join("");
+    const box = (k, label) => `<label><input type="checkbox" data-z="${k}" ${s[k] ? "checked" : ""}> ${label}</label>`;
+    return `<div class="zero-edit"><label class="field"><span>Name</span><input data-z="name" maxlength="80" value="${SP.esc(s.name)}"></label><label class="field"><span>Description</span><input data-z="description" maxlength="300" value="${SP.esc(s.description)}"></label>${box("showTracked", "Show tracked columns in Overview")}<hr>${box("hideAsins", "Hide ASINs")}${box("hideKeywords", "Hide keywords")}<label class="field"><span>Sort by</span><select data-z="sort">${sorts}</select></label><table><thead><tr><th>Filter conditions</th><th>Min</th><th>Max</th><th>Track</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  };
+  // The dialog's values as { settings }, or { error } about the first problem.
+  const readZeroEdit = m => {
+    const z = k => $(`[data-z=${k}]`, m), filters = {};
+    for (const [k, label] of ZERO_METRICS) {
+      if (UNAVAILABLE.has(k)) continue;
+      const min = $(`[data-min=${k}]`, m).value.trim(), max = $(`[data-max=${k}]`, m).value.trim();
+      if (min !== "" && max !== "" && Number(min) > Number(max)) return { error: `The min for ${label} is above its max.` };
+      if (min !== "" || max !== "") filters[k] = { ...(min !== "" ? { min: Number(min) } : {}), ...(max !== "" ? { max: Number(max) } : {}) };
+    }
+    if (!z("name").value.trim()) return { error: "Give the card a name." };
+    const [sort, dir] = z("sort").value.split(":");
+    return { settings: { name: z("name").value.trim(), description: z("description").value.trim(), showTracked: z("showTracked").checked, hideAsins: z("hideAsins").checked, hideKeywords: z("hideKeywords").checked, sort, dir, filters, track: ZERO_METRICS.map(([k]) => k).filter(k => !UNAVAILABLE.has(k) && $(`[data-track=${k}]`, m).checked) } };
+  };
 
   SP.pages["/Ads"] = {
     title: "Insights overview",
-    render() {
-      const c1 = SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${v}</span>` }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
-        rows: TERMS.map(([term, imp, clicks, v], i) => ({ p: P[i % 2], sp: "Products", term, imp, clicks, pl: v })), sum: rs => ({ imp: rs.reduce((a, r) => a + r.imp, 0), clicks: rs.reduce((a, r) => a + r.clicks, 0), pl: rs.reduce((a, r) => a + r.pl, 0) }) });
+    load: () => {
+      if (!SP.usesRealData()) return Promise.resolve(sampleZero());
+      const r = SP.rangeFor("Last 30 Days");
+      return SP.api.get(`/api/ads/zero-sales?${new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" })}`);
+    },
+    render(data) {
+      const zs = data.settings || zeroDefaults();
+      const c1 = zeroBody(data, zs);
       const c2 = SP.grid({ id: "i2", search: false, noFoot: true, cls: "fit", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "clicks", label: "Clicks", align: "r" }, { key: "spend", label: "Spend", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "conv", label: "Conversion", align: "r", fmt: v => pct(v) }, { key: "acos", label: "ACOS", align: "r", fmt: v => pct(v) }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ p: P[0], sp: "Products", term: "cordless jump rope", clicks: 28, spend: 25.87, cpc: 0.92, conv: 3.57, acos: 123.25, pl: -24.8 }], sum: rs => ({ ...rs[0], p: null, sp: null, term: null }) });
       const c3 = SP.grid({ id: "i3", search: false, emptyFoot: false, cls: "fit", empty: "No results found", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "orders", label: "Orders", align: "r" }, { key: "spend", label: "Spend", align: "r" }, { key: "cpc", label: "CPC", align: "r" }, { key: "conv", label: "Conversion", align: "r" }, { key: "acos", label: "ACOS", align: "r" }, { key: "pl", label: "P&amp;L", align: "r" }], rows: [] });
       const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
         sum: rs => ({ clicks: rs.reduce((a, r) => a + r.clicks, 0), cpc: rs.reduce((a, r) => a + r.cpc, 0) / rs.length, pl: rs.reduce((a, r) => a + r.pl, 0) }) });
-      const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30)}${ctl.products()}${ctl.apply()}</div>`, "")}
-        ${card("Search Terms with 0 Sales", c1, "[Tip]: You can remove poor search terms automatically with [Automation].", "st0")}
-        ${card("Search Terms with High ACOS", c2, "[Tip]: Use [Automation] strategies to improve your advertising results.", "acos")}
-        ${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}
-        ${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`;
+      const waitingCard = title => `<section class="icard"><header><h3>${title}</h3></header><div class="icard-body"><p>Live data for this insight is not connected yet.</p></div></section>`;
+      const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
+        ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0")}
+        ${SP.usesRealData() ? ["Search Terms with High ACOS", "Performing Search Terms", "Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Search Terms with High ACOS", c2, "[Tip]: Use [Automation] strategies to improve your advertising results.", "acos")}${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
-    wire(root) {
+    wire(root, data) {
+      let current = data;
+      const initial = SP.rangeFor("Last 30 Days");
+      let range = { from: data.from || SP.iso(initial.from), to: data.to || SP.iso(initial.to) };
+      let settings = data.settings || zeroDefaults();
+      const zeroCard = $("[data-zero-card]", root);
+      // Settings can change the columns, so the whole card is redrawn.
+      const update = next => {
+        current = next;
+        if (next.settings) settings = next.settings;
+        $("h3", zeroCard).textContent = settings.name;
+        $("footer", zeroCard).textContent = settings.description;
+        $(".icard-body", zeroCard).innerHTML = zeroBody(next, settings);
+      };
+      // Settings are saved whole, so saves run one at a time: each starts once the one before has
+      // finished and sends the settings as they are then, so it carries every change made before it
+      // (a dialog's name and a dragged column order alike) and the last one is what's stored.
+      let saving = Promise.resolve(), pendingSaves = 0, settingsChanges = 0, editSubmits = 0;
+      // What the account last accepted, which a refused dialog save falls back to.
+      let accepted = settings;
+      const saveSettings = () => {
+        pendingSaves++;
+        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", settings)).then(saved => { accepted = saved.settings || accepted; return saved; });
+        saving = request.catch(() => {}).finally(() => { pendingSaves--; });
+        return request;
+      };
+      // Each request gets a number; only the latest one may update the panel, so a slower,
+      // superseded response can't replace newer results. A response that began before a local
+      // settings change, or arrives while a save is still going, may carry older settings, so the
+      // local ones are kept then.
+      let latest = 0;
+      const fetchPage = async page => {
+        const id = ++latest, changes = settingsChanges;
+        if (!SP.usesRealData()) return update(sampleZero(settings, page));
+        try {
+          const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page) });
+          const next = await SP.api.get(`/api/ads/zero-sales?${query}`);
+          if (id === latest) update(changes !== settingsChanges || pendingSaves ? { ...next, settings } : next);
+        } catch (err) { if (id === latest) SP.toast(err.message); }
+      };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");
-        if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
-        if (e.target.closest("[data-apply]")) SP.toast("Insights updated for the chosen dates.");
+        if (ed?.dataset.edit === "st0") {
+          // Real data saves the settings to the account; sample data keeps them for this page.
+          const dialog = SP.modal(`Edit ${SP.esc(settings.name)}`, zeroEdit(settings), m => {
+            const { settings: read, error } = readZeroEdit(m);
+            if (error) { SP.toast(error); return false; }
+            // The dialog doesn't show the column order, so saving keeps it.
+            const next = { ...read, order: settings.order || [] };
+            if (!SP.usesRealData()) { settings = next; fetchPage(0); return; }
+            // Applied here first, so a save made meanwhile includes it. If the account refuses it and
+            // nothing was submitted from the dialog since, its fields go back to what the account last
+            // accepted (a later submit carries them all again); the column order stays either way, and
+            // the card is redrawn in case a page load showed the edit meanwhile.
+            const submit = ++editSubmits;
+            settings = next;
+            settingsChanges++;
+            saveSettings().then(() => { m.remove(); fetchPage(0); }, err => {
+              if (submit === editSubmits) settings = { ...accepted, order: settings.order };
+              update({ ...current, settings });
+              SP.toast(err.message);
+            });
+            return false;
+          });
+          $("[data-z=sort]", dialog).value = `${settings.sort}:${settings.dir}`;
+        } else if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
+        if (e.target.closest("[data-zero-next]")) fetchPage(current.page + 1);
+        if (e.target.closest("[data-zero-prev]")) fetchPage(current.page - 1);
+        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(current.page)).catch(err => SP.toast(err.message));
+        if (e.target.closest("[data-apply]")) fetchPage(0);
       });
+      root.addEventListener("rangechange", e => {
+        range = { from: e.detail.from, to: e.detail.to };
+        fetchPage(0);
+      });
+      // A dragged header redraws the card with its new column order, then saves it with the card's
+      // settings (to the account with real data, for this page with sample data).
+      root.addEventListener("gridreorder", e => {
+        if (e.detail.id !== "i1") return;
+        settings = { ...settings, order: e.detail.keys };
+        settingsChanges++;
+        update({ ...current, settings });
+        if (SP.usesRealData()) saveSettings().catch(err => SP.toast(err.message));
+      });
+      // A shared ad group's product panel is fixed to the page beside the photo (CSS shows it), so the
+      // table's scrolling wrapper can't clip it. It goes on the right, or the left if there's no room.
+      const placePanel = e => {
+        const multi = e.target.closest?.("[data-zero-multi]"), pop = multi && $(".zero-pop", multi);
+        if (!pop) return;
+        const at = multi.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+        pop.style.left = `${at.right + 8 + w <= innerWidth - 8 ? at.right + 8 : Math.max(8, at.left - 8 - w)}px`;
+        pop.style.top = `${Math.max(8, Math.min(at.top + at.height / 2 - h / 2, innerHeight - h - 8))}px`;
+      };
+      root.addEventListener("mouseover", placePanel);
+      root.addEventListener("focusin", placePanel);
     },
   };
   SP.pages["/Ads/Insights"] = SP.pages["/Ads"];

@@ -1,5 +1,5 @@
 import { createAdsClient } from "../../server/amazon/ads.js";
-import { syncAds } from "../../server/ads/sync.js";
+import { SEARCH_PRODUCTS, syncAds } from "../../server/ads/sync.js";
 import { requireUser, secretMatches } from "../../server/auth.js";
 import { adsConfig } from "../../server/config.js";
 import { getDb } from "../../server/db.js";
@@ -18,6 +18,6 @@ export async function POST(request) {
 
 async function run() {
   const cfg = adsConfig();
-  const summary = await syncAds({ db: getDb(), ads: createAdsClient(cfg), profileId: cfg.profileId, timeZone: cfg.timeZone, budgetMs: 45_000 });
+  const summary = await syncAds({ db: getDb(), ads: createAdsClient(cfg), profileId: cfg.profileId, timeZone: cfg.timeZone, products: ["SP", "SB", "SD", ...SEARCH_PRODUCTS], budgetMs: 45_000 });
   return json(summary);
 }

@@ -33,6 +33,8 @@ describe("isReadOnly", () => {
     expect(isReadOnly("POST", "/reporting/reports")).toBe(true);
     expect(isReadOnly("POST", "/sp/campaigns/list")).toBe(true);
     expect(isReadOnly("POST", "/sp/keywords/list?x=1")).toBe(true);
+    expect(isReadOnly("POST", "/product/metadata")).toBe(true);
+    expect(isReadOnly("POST", "/product/metadata/extra")).toBe(false);
   });
 
   it("treats everything else as a write", () => {
@@ -99,6 +101,43 @@ describe("createAdsClient", () => {
     const [url, init] = fetch.mock.calls[1];
     expect(url).toBe("https://ads.test/v2/profiles");
     expect(init.headers).toMatchObject({ Authorization: "Bearer token:real-refresh", "Amazon-Advertising-API-ClientId": "client-id", "Amazon-Advertising-API-Scope": "111" });
+  });
+
+  it("stops a request when the caller's signal aborts", async () => {
+    const fetch = fakeFetch((url, init) => new Promise((resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason))));
+    const ads = createAdsClient(cfg, { fetch });
+    await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.timeout(20) })).rejects.toThrow(/abort/i);
+  });
+
+  it("stops waiting for a slow token when the caller's signal aborts, without cancelling the shared refresh", async () => {
+    const fetch = vi.fn(async url => {
+      if (String(url).endsWith("/auth/o2/token")) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return Response.json({});
+    });
+    const ads = createAdsClient(cfg, { fetch });
+    const started = Date.now();
+    await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.timeout(20) })).rejects.toThrow(/abort/i);
+    expect(Date.now() - started).toBeLessThan(150);
+    expect(fetch.mock.calls[0][1].signal).toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an already-cancelled request without leaving a failed token refresh unhandled", async () => {
+    const unhandled = [];
+    const onUnhandled = reason => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const fetch = vi.fn(async () => { throw new Error("token service down"); });
+      const ads = createAdsClient(cfg, { fetch });
+      await expect(ads.request("POST", "/sb/v4/ads/list", { profileId: "111", body: {}, signal: AbortSignal.abort() })).rejects.toThrow(/abort/i);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 
   it("writes to the test account with the test login's token", async () => {

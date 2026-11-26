@@ -57,6 +57,6 @@ export async function adsTrend(db, { profileId, from, to }) {
       sales: money(r.sales),
     })),
     synced,
-    adTypes: Object.fromEntries(Object.keys(REPORTS).map(k => [k, { state: state(k) }])),
+    adTypes: Object.fromEntries(["SP", "SB", "SD"].filter(k => REPORTS[k]).map(k => [k, { state: state(k) }])),
   };
 }
