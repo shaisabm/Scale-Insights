@@ -176,8 +176,8 @@ describe("Search Terms with 0 Sales card", () => {
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
     drag("P&L", "Impressions");
-    drag("Clicks", "Product");
     await vi.waitFor(() => expect(saves).toHaveLength(1));
+    drag("Clicks", "Product");
     // The second save waits for the first to finish.
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(saves).toHaveLength(1);
@@ -185,6 +185,55 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(saves).toHaveLength(2));
     expect(saves.map(x => x.order)).toEqual([["p", "sp", "term", "pl", "impressions", "clicks"], ["clicks", "p", "sp", "term", "pl", "impressions"]]);
     saves[1].reply.resolve(json({ settings: savedSettings(saves[1].order) }));
+  });
+
+  it("keeps both the dialog's changes and a column dragged while they were saving", async () => {
+    stubNavigation();
+    const saves = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method !== "PUT") return json({ ...response(0), settings: savedSettings([]) });
+      const reply = later();
+      saves.push({ body: JSON.parse(init.body), reply });
+      return reply.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    document.querySelector("[data-edit=st0]").click();
+    document.querySelector(".modal-wrap [data-z=name]").value = "Renamed";
+    document.querySelector(".modal-wrap [data-ok]").click();
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    // A column moves while the dialog's save is still going.
+    drag("P&L", "Impressions");
+    const moved = ["p", "sp", "term", "pl", "impressions", "clicks"];
+    saves[0].reply.resolve(json({ settings: saves[0].body }));
+    await vi.waitFor(() => expect(saves).toHaveLength(2));
+    // The save sent last carries both changes.
+    expect([saves[1].body.name, saves[1].body.order]).toEqual(["Renamed", moved]);
+    saves[1].reply.resolve(json({ settings: saves[1].body }));
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Renamed"));
+    expect(headers().map(th => th.dataset.gcol)).toEqual(moved);
+  });
+
+  it("puts the dialog's changes back if the account refuses them", async () => {
+    stubNavigation();
+    const bodies = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method !== "PUT") return json(response(0));
+      bodies.push(JSON.parse(init.body));
+      return bodies.length === 1 ? new Response(JSON.stringify({ error: "Choose a sort order from the list." }), { status: 400, headers: { "Content-Type": "application/json" } }) : json({ settings: bodies.at(-1) });
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    document.querySelector("[data-edit=st0]").click();
+    document.querySelector(".modal-wrap [data-z=name]").value = "Refused";
+    document.querySelector(".modal-wrap [data-ok]").click();
+    await vi.waitFor(() => expect(document.querySelector("#toast").textContent).toBe("Choose a sort order from the list."));
+    expect(document.querySelector(".modal-wrap")).not.toBeNull();
+    document.querySelector(".modal-wrap [data-close]").click();
+    // The next save sends the settings as they were, with the new column order.
+    drag("P&L", "Impressions");
+    await vi.waitFor(() => expect(bodies).toHaveLength(2));
+    expect([bodies[1].name, bodies[1].order]).toEqual(["Search Terms with 0 Sales", ["p", "sp", "term", "pl", "impressions", "clicks"]]);
   });
 
   it("refuses a min above its max and keeps the dialog open", async () => {

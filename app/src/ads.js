@@ -199,12 +199,13 @@
         $("footer", zeroCard).textContent = settings.description;
         $(".icard-body", zeroCard).innerHTML = zeroBody(next, settings);
       };
-      // Settings are saved whole, so saves run one at a time in the order they were made: each starts
-      // once the one before has finished, and the last one made is the one stored.
+      // Settings are saved whole, so saves run one at a time: each starts once the one before has
+      // finished and sends the settings as they are then, so it carries every change made before it
+      // (a dialog's name and a dragged column order alike) and the last one is what's stored.
       let saving = Promise.resolve(), pendingSaves = 0, settingsChanges = 0;
-      const saveSettings = next => {
+      const saveSettings = () => {
         pendingSaves++;
-        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", next));
+        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", settings));
         saving = request.catch(() => {}).finally(() => { pendingSaves--; });
         return request;
       };
@@ -232,7 +233,12 @@
             // The dialog doesn't show the column order, so saving keeps it.
             const next = { ...read, order: settings.order || [] };
             if (!SP.usesRealData()) { settings = next; fetchPage(0); return; }
-            saveSettings(next).then(saved => { settings = saved.settings || next; settingsChanges++; m.remove(); fetchPage(0); }, err => SP.toast(err.message));
+            // Applied here first, so a save made meanwhile includes it; a refused save puts the
+            // dialog's fields back as they were and keeps any newer column order.
+            const before = settings;
+            settings = next;
+            settingsChanges++;
+            saveSettings().then(() => { m.remove(); fetchPage(0); }, err => { settings = { ...before, order: settings.order }; SP.toast(err.message); });
             return false;
           });
           $("[data-z=sort]", dialog).value = `${settings.sort}:${settings.dir}`;
@@ -253,7 +259,7 @@
         settings = { ...settings, order: e.detail.keys };
         settingsChanges++;
         update({ ...current, settings });
-        if (SP.usesRealData()) saveSettings(settings).catch(err => SP.toast(err.message));
+        if (SP.usesRealData()) saveSettings().catch(err => SP.toast(err.message));
       });
       // A shared ad group's product panel is fixed to the page beside the photo (CSS shows it), so the
       // table's scrolling wrapper can't clip it. It goes on the right, or the left if there's no room.
