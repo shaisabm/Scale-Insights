@@ -199,16 +199,27 @@
         $("footer", zeroCard).textContent = settings.description;
         $(".icard-body", zeroCard).innerHTML = zeroBody(next, settings);
       };
+      // Settings are saved whole, so saves run one at a time in the order they were made: each starts
+      // once the one before has finished, and the last one made is the one stored.
+      let saving = Promise.resolve(), pendingSaves = 0, settingsChanges = 0;
+      const saveSettings = next => {
+        pendingSaves++;
+        const request = saving.then(() => SP.api.put("/api/ads/zero-sales-settings", next));
+        saving = request.catch(() => {}).finally(() => { pendingSaves--; });
+        return request;
+      };
       // Each request gets a number; only the latest one may update the panel, so a slower,
-      // superseded response can't replace newer results.
+      // superseded response can't replace newer results. A response that began before a local
+      // settings change, or arrives while a save is still going, may carry older settings, so the
+      // local ones are kept then.
       let latest = 0;
       const fetchPage = async page => {
-        const id = ++latest;
+        const id = ++latest, changes = settingsChanges;
         if (!SP.usesRealData()) return update(sampleZero(settings, page));
         try {
           const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page) });
           const next = await SP.api.get(`/api/ads/zero-sales?${query}`);
-          if (id === latest) update(next);
+          if (id === latest) update(changes !== settingsChanges || pendingSaves ? { ...next, settings } : next);
         } catch (err) { if (id === latest) SP.toast(err.message); }
       };
       root.addEventListener("click", e => {
@@ -221,7 +232,7 @@
             // The dialog doesn't show the column order, so saving keeps it.
             const next = { ...read, order: settings.order || [] };
             if (!SP.usesRealData()) { settings = next; fetchPage(0); return; }
-            SP.api.put("/api/ads/zero-sales-settings", next).then(saved => { settings = saved.settings || next; m.remove(); fetchPage(0); }, err => SP.toast(err.message));
+            saveSettings(next).then(saved => { settings = saved.settings || next; settingsChanges++; m.remove(); fetchPage(0); }, err => SP.toast(err.message));
             return false;
           });
           $("[data-z=sort]", dialog).value = `${settings.sort}:${settings.dir}`;
@@ -240,8 +251,9 @@
       root.addEventListener("gridreorder", e => {
         if (e.detail.id !== "i1") return;
         settings = { ...settings, order: e.detail.keys };
+        settingsChanges++;
         update({ ...current, settings });
-        if (SP.usesRealData()) SP.api.put("/api/ads/zero-sales-settings", settings).catch(err => SP.toast(err.message));
+        if (SP.usesRealData()) saveSettings(settings).catch(err => SP.toast(err.message));
       });
       // A shared ad group's product panel is fixed to the page beside the photo (CSS shows it), so the
       // table's scrolling wrapper can't clip it. It goes on the right, or the left if there's no room.

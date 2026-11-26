@@ -13,6 +13,28 @@ function response(page) {
   };
 }
 
+// The card's column headers, and a drag between two of them as the browser sends it: start on one
+// header, then over and onto another.
+const headers = () => [...document.querySelectorAll("[data-zero-card] thead th")];
+const labels = () => headers().map(th => th.textContent.replace(/[↓↑]/g, "").trim());
+const header = label => headers().find(th => th.textContent.includes(label));
+function drag(from, to) {
+  const data = new Map(), dataTransfer = { setData: (k, v) => data.set(k, v), getData: k => data.get(k), effectAllowed: "", dropEffect: "" };
+  const fire = (el, type) => el.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer }));
+  const source = header(from), target = header(to);
+  fire(source, "dragstart");
+  fire(target, "dragover");
+  fire(target, "drop");
+}
+// A promise and the function that settles it, for replies a test releases when it chooses.
+function later() {
+  let resolve;
+  const promise = new Promise(r => { resolve = r; });
+  return { promise, resolve };
+}
+const json = body => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+const savedSettings = order => ({ name: "Search Terms with 0 Sales", description: "", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: {}, track: ["impressions", "clicks", "pl"], order });
+
 // Opens the card's date range picker and chooses a preset.
 function pickRange(preset) {
   document.querySelector("[data-zero-card]").closest(".page").querySelector("[data-range]").click();
@@ -99,18 +121,6 @@ describe("Search Terms with 0 Sales card", () => {
     vi.stubGlobal("fetch", fetch);
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
-    const headers = () => [...document.querySelectorAll("[data-zero-card] thead th")];
-    const labels = () => headers().map(th => th.textContent.replace(/[↓↑]/g, "").trim());
-    const header = label => headers().find(th => th.textContent.includes(label));
-    // A drag as the browser sends it: start on one header, then over and onto another.
-    const drag = (from, to) => {
-      const data = new Map(), dataTransfer = { setData: (k, v) => data.set(k, v), getData: k => data.get(k), effectAllowed: "", dropEffect: "" };
-      const fire = (el, type) => el.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer }));
-      const source = header(from), target = header(to);
-      fire(source, "dragstart");
-      fire(target, "dragover");
-      fire(target, "drop");
-    };
     expect(labels()).toEqual(["Product", "Sponsored", "Search term", "Impressions", "Clicks", "P&L"]);
     expect(header("Clicks").getAttribute("draggable")).toBe("true");
 
@@ -131,6 +141,50 @@ describe("Search Terms with 0 Sales card", () => {
     document.querySelector(".modal-wrap [data-ok]").click();
     await vi.waitFor(() => expect(saved).not.toBeNull());
     expect(saved.order).toEqual(["sp", "term", "pl", "impressions", "clicks", "p"]);
+  });
+
+  it("keeps a dragged column order when a page that was already loading arrives afterwards", async () => {
+    stubNavigation();
+    const pending = later();
+    let loads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return json({ settings: JSON.parse(init.body) });
+      // The first load answers at once; the second waits until the test releases it.
+      return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : pending.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    document.querySelector("[data-zero-card] [data-zero-next]").click();
+    drag("P&L", "Impressions");
+    const moved = ["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"];
+    expect(labels()).toEqual(moved);
+    // Page 2 was read before the drag, with the old order.
+    pending.resolve(json({ ...response(1), settings: savedSettings([]) }));
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]").textContent).toContain("search term 8"));
+    expect(labels()).toEqual(moved);
+  });
+
+  it("saves settings one at a time, so the last change made is the one stored", async () => {
+    stubNavigation();
+    const saves = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method !== "PUT") return json(response(0));
+      const reply = later();
+      saves.push({ order: JSON.parse(init.body).order, reply });
+      return reply.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    drag("P&L", "Impressions");
+    drag("Clicks", "Product");
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    // The second save waits for the first to finish.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(saves).toHaveLength(1);
+    saves[0].reply.resolve(json({ settings: savedSettings(saves[0].order) }));
+    await vi.waitFor(() => expect(saves).toHaveLength(2));
+    expect(saves.map(x => x.order)).toEqual([["p", "sp", "term", "pl", "impressions", "clicks"], ["clicks", "p", "sp", "term", "pl", "impressions"]]);
+    saves[1].reply.resolve(json({ settings: savedSettings(saves[1].order) }));
   });
 
   it("refuses a min above its max and keeps the dialog open", async () => {
