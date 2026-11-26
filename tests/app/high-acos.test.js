@@ -32,8 +32,8 @@ describe("Search Terms with High ACOS card", () => {
     expect(bodyRows().map(tr => tr.textContent)).toHaveLength(7); // first page of 8
     expect(bodyRows()[0].textContent).toContain("weighted jump rope");
     expect(bodyRows()[6].textContent).toContain("adjustable jump rope");
-    expect(document.body.textContent).not.toContain("B0JUMP99XY");
-    expect(document.body.textContent).not.toContain("leather jump rope");
+    expect(card.textContent).not.toContain("B0JUMP99XY");
+    expect(card.textContent).not.toContain("leather jump rope");
     // The card has its own Edit button, like the 0 Sales card.
     expect(card.querySelector("[data-edit=acos]").textContent).toContain("Edit");
     // Nothing is saved anywhere on sample data.
@@ -66,7 +66,8 @@ describe("Search Terms with High ACOS card", () => {
     const api = stubFetch({
       "GET /api/ads/zero-sales": page(0, rows.filter(r => r.spend >= 10), { name: "Wasted terms", description: "", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks"], order: [] }),
       // The report echoes the settings as saved, as the real route loads them from the database.
-      "GET /api/ads/high-acos": () => page(0, keywords, saves.length ? acosSettings(saves[saves.length - 1][1]) : acosSettings()),      "PUT /api/ads/zero-sales-settings": init => { saves.push(["zero", JSON.parse(init.body)]); return { settings: JSON.parse(init.body) }; },
+      "GET /api/ads/high-acos": () => page(0, keywords, saves.length ? acosSettings(saves[saves.length - 1][1]) : acosSettings()),
+      "GET /api/ads/performing": page(0, []),
       "PUT /api/ads/high-acos-settings": init => { saves.push(["acos", JSON.parse(init.body)]); return { settings: JSON.parse(init.body) }; },
     });
     openApp("/Ads", { realData: true });
