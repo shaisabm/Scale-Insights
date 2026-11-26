@@ -27,6 +27,8 @@ describe("Search Terms with High ACOS card", () => {
     await vi.waitFor(() => expect(document.querySelector("[data-hacos-card] table.grid")).not.toBeNull());
     const card = document.querySelector("[data-hacos-card]");
     expect(card.querySelector("h3").textContent).toBe("Search Terms with High ACOS");
+    expect([...card.querySelectorAll("thead th")].map(th => th.dataset.gcol)).not.toContain("campaignId");
+    expect([...card.querySelectorAll("thead th")].map(th => th.dataset.gcol)).not.toContain("adGroupId");
     // The ASIN term and the two under 50% ACOS are filtered out by the defaults, worst ACOS first.
     const bodyRows = () => [...card.querySelectorAll("tbody tr[data-k]")];
     expect(bodyRows().map(tr => tr.textContent)).toHaveLength(7); // first page of 8

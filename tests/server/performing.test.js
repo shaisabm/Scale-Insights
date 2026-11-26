@@ -5,7 +5,7 @@ import { PUT as saveRoute } from "../../api/ads/performing-settings.js";
 import { PERFORMING_DEFAULTS, cleanZeroSettings, loadZeroSettings, saveZeroSettings } from "../../server/ads/insight-settings.js";
 import { zeroSales } from "../../server/ads/zero-sales.js";
 import { SESSION_COOKIE, createSessionToken } from "../../server/auth.js";
-import { migrate } from "../../server/db.js";
+import { getDb, migrate } from "../../server/db.js";
 import { storeWindow } from "../../server/ads/sync.js";
 
 const profileId = "test-profile";
@@ -52,7 +52,7 @@ describe("zeroSales with the Performing Search Terms defaults", () => {
     for (const [campaign, group] of [["jump", "pink"], ["other", "pink"], ["battle", "pink"], ["battle", "black"]]) {
       await db.execute({ sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', ?, ?, 'B0PRODUCTA', ?, ?, ?)", args: [profileId, campaign, group, to, to, to] });
     }
-    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS });
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS, perAdGroup: true });
     expect(data.rows.map(r => [r.term, r.campaignId, r.adGroupId, r.clicks, r.orders])).toEqual([
       ["workout equipment", "battle", "pink", 1, 1],
       ["battle ropes", "jump", "pink", 3, 1],
@@ -72,7 +72,7 @@ describe("zeroSales with the Performing Search Terms defaults", () => {
     await storeWindow(db, { profileId, product: "SP", start: to, end: to, rows: [
       { date: to, campaignId: "1", adGroupId: "2", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 },
     ], syncedAt: "now" });
-    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS });
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS, perAdGroup: true });
     expect(data.rows.map(r => [r.term, r.conversion])).toEqual([["best term", 40], ["middle term", 20]]);
     expect(data.totals.conversion).toBeCloseTo((4 + 2) / (10 + 10) * 100);
   });
@@ -104,6 +104,30 @@ describe("GET /api/ads/performing and PUT /api/ads/performing-settings", () => {
       expect((await zero.json()).settings.filters).toEqual({ spend: { min: 10 }, orders: { max: 0 } });
       const acos = await (await import("../../api/ads/high-acos.js")).GET(new Request("https://app.test/api/ads/high-acos", { headers: cookie }));
       expect((await acos.json()).settings.filters).toEqual({ acos: { min: 50 } });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+
+  it("uses ad-group rows in the authenticated Performing route", async () => {
+    vi.stubEnv("SESSION_SECRET", "secret");
+    vi.stubEnv("TURSO_DATABASE_URL", ":memory:");
+    vi.stubEnv("AMAZON_ADS_PROFILE_ID", "performing-route-grain");
+    try {
+      const db = await migrate(getDb());
+      const routeProfile = "performing-route-grain";
+      await storeWindow(db, { profileId: routeProfile, product: "SB_SEARCH", start: to, end: to, rows: [
+        { product: "SB_SEARCH", date: to, campaignId: "winning", adGroupId: "pink", term: "battle ropes", impressions: 100, clicks: 3, cost: 3, orders: 1, units: 1, sales: 24.99 },
+        { product: "SB_SEARCH", date: to, campaignId: "other", adGroupId: "pink", term: "battle ropes", impressions: 500, clicks: 21, cost: 10, orders: 0, units: 0, sales: 0 },
+      ], syncedAt: "now" });
+      for (const campaign of ["winning", "other"]) {
+        await db.execute({ sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', ?, 'pink', 'B0PRODUCTA', ?, ?, ?)", args: [routeProfile, campaign, to, to, to] });
+      }
+      const response = await performingRoute(new Request(`https://app.test/api/ads/performing?from=${from}&to=${to}`, { headers: cookie }));
+      expect(response.status).toBe(200);
+      const report = await response.json();
+      expect(report.rows.map(r => [r.term, r.campaignId, r.adGroupId, r.clicks, r.orders])).toEqual([["battle ropes", "winning", "pink", 3, 1]]);
     } finally {
       vi.unstubAllEnvs();
     }

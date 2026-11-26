@@ -80,7 +80,7 @@
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
   const sampleGroup = i => ({ campaignId: String(100000000000 + i), adGroupId: String(200000000000 + i) });
-  const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], ...sampleGroup(i), impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
+  const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
   // High ACOS sample rows as [term, impressions, clicks, spend, sales, orders]; the last two sit
   // below the card's default 50% filter, and one is an ASIN, so each setting has something to do.
   const ACOS_TERMS = [
@@ -89,9 +89,10 @@
     ["boxing jump rope", 900, 12, 10.8, 9.99, 1], ["jump rope workout", 2000, 25, 19.5, 26.4, 2], ["rope skipping", 800, 10, 7.9, 8.5, 1],
     ["jump rope for kids", 3400, 30, 8.2, 25.0, 3], ["leather jump rope", 1100, 14, 5.5, 22.0, 2],
   ];
-  const acosRow = ([term, impressions, clicks, spend, sales, orders], i) => ({ term, sponsored: "Products", p: P[i % 2], ...sampleGroup(i), impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100, conversion: (orders / clicks) * 100, acos: (spend / sales) * 100, roas: sales / spend, pl: sales - spend, breakEvenBid: null });
+  const acosRow = ([term, impressions, clicks, spend, sales, orders], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100, conversion: (orders / clicks) * 100, acos: (spend / sales) * 100, roas: sales / spend, pl: sales - spend, breakEvenBid: null });
   // Performing Search Terms sample rows as [term, impressions, clicks, spend, sales, orders]; the
   // last two sit below the card's default 15% conversion filter, and one is an ASIN.
+  /** @type {[string, number, number, number, number, number][]} */
   const PERFORMING_TERMS = [
     ["training rope with handles", 2600, 44, 31.87, 60.1, 9], ["speed jump rope", 2100, 36, 24.5, 48.3, 7],
     ["weighted jump rope", 4200, 55, 52.31, 71.8, 10], ["jump rope for men", 3100, 38, 30.12, 54.6, 8],
@@ -119,7 +120,7 @@
   }
   const sampleZero = (settings = zeroDefaults(), page = 0) => sampleInsight(TERMS.map(zeroRow), settings, page);
   const sampleAcos = (settings = acosDefaults(), page = 0) => sampleInsight(ACOS_TERMS.map(acosRow), settings, page);
-  const samplePerf = (settings = performingDefaults(), page = 0) => sampleInsight(PERFORMING_TERMS.map(acosRow), settings, page);
+  const samplePerf = (settings = performingDefaults(), page = 0) => sampleInsight(PERFORMING_TERMS.map((row, i) => ({ ...acosRow(row, i), ...sampleGroup(i) })), settings, page);
   const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
   // A row naming several products (an ad group advertising them all) shows the first one's photo with
@@ -162,16 +163,16 @@
   const BLANK_ZERO = new Set(["orders", "units", "sales", "conversion", "acos", "roas"]);
   // Columns follow the order their headers were dragged into (settings.order); any it doesn't
   // list, such as a metric tracked later, keep their usual order after the ones it does.
-  const zeroCols = s => {
+  const zeroCols = (s, showIds = false) => {
     const idCell = v => `<span class="clamp2">${SP.esc(v ?? "")}</span>`;
     const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: idCell },
-      { key: "campaignId", label: "Campaign ID", w: 130, fmt: idCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: idCell },
+      ...(showIds ? [{ key: "campaignId", label: "Campaign ID", w: 130, fmt: idCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: idCell }] : []),
       ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
     const order = s.order || [], rank = c => (order.includes(c.key) ? order.indexOf(c.key) : order.length);
     return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
   };
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
-  const zeroBody = (data, s, id) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
+  const zeroBody = (data, s, id, showIds = false) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s, showIds), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   const zeroEdit = s => {
     const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
     const rows = ZERO_METRICS.map(([k, label]) => {
@@ -206,7 +207,7 @@
       const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults();
       const c1 = zeroBody(data.st0, zs, "i1");
       const c2 = zeroBody(data.acos, as, "i2");
-      const c3 = zeroBody(data.perf, ps, "i3");
+      const c3 = zeroBody(data.perf, ps, "i3", true);
       const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
         sum: rs => ({ clicks: rs.reduce((a, r) => a + r.clicks, 0), cpc: rs.reduce((a, r) => a + r.cpc, 0) / rs.length, pl: rs.reduce((a, r) => a + r.pl, 0) }) });
@@ -242,7 +243,7 @@
         if (next.settings) c.settings = next.settings;
         $("h3", c.el).textContent = c.settings.name;
         $("footer", c.el).textContent = c.settings.description;
-        $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid);
+        $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid, c.key === "perf");
       };
       // Settings are saved whole, so saves run one at a time: each starts once the one before has
       // finished and sends the settings as they are then, so it carries every change made before it
