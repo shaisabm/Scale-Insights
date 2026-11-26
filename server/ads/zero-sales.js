@@ -38,8 +38,8 @@ function metrics(r) {
 const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f.min) && (f.max == null || v - 0.000001 <= f.max);
 
 /**
- * One search term per ad type/product, aggregated across the chosen dates, filtered, sorted and
- * paged by the card's `settings`. `today` (the profile's date) marks which of those dates Amazon
+ * One search term per ad type, campaign, ad group and advertised product set, aggregated across
+ * the chosen dates, then filtered, sorted and paged by the card's `settings`. `today` (the profile's date) marks which of those dates Amazon
  * can provide: from `historyDays` back, through yesterday.
  */
 export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize = 7, settings = ZERO_DEFAULTS }) {
@@ -76,7 +76,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     // ads they reported in these dates, Sponsored Brands ones through what they advertised each day.
     // An ad group advertising several products gives one row naming all of them, since the report
     // can't say which of them a search was for. Rows whose products aren't known are left out of
-    // this product-level insight and their spend is reported instead.
+    // this insight and their spend is reported instead.
     const sb = r.ad_product === "SB_SEARCH";
     // Sorted, comma-separated ASINs.
     const asin = sb ? (r.asins ? String(r.asins) : null) : spAsins.get(`${r.campaign_id}|${r.ad_group_id}`);
@@ -84,12 +84,12 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
       unattributed[r.ad_product] += Number(r.cost);
       continue;
     }
-    const key = `${r.ad_product}|${asin}|${r.search_term}`;
-    const row = grouped.get(key) || { adProduct: r.ad_product, asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
+    const key = `${r.ad_product}|${r.campaign_id}|${r.ad_group_id}|${asin}|${r.search_term}`;
+    const row = grouped.get(key) || { adProduct: r.ad_product, campaignId: String(r.campaign_id), adGroupId: String(r.ad_group_id), asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
     for (const k of ["impressions", "clicks", "cost", "orders", "units", "sales"]) row[k] += Number(r[k]);
     grouped.set(key, row);
   }
-  const all = [...grouped.values()].map(r => ({ adProduct: r.adProduct, asin: r.asin, term: r.term, counts: r, ...metrics(r) }));
+  const all = [...grouped.values()].map(r => ({ adProduct: r.adProduct, campaignId: r.campaignId, adGroupId: r.adGroupId, asin: r.asin, term: r.term, counts: r, ...metrics(r) }));
   const matched = all.filter(r => Object.entries(settings.filters).every(([k, f]) => within(r[k], f))
     && !(settings.hideAsins && asinPattern.test(r.term)) && !(settings.hideKeywords && !asinPattern.test(r.term)));
   // Unknown values sort last either way.
@@ -98,7 +98,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     const x = a[settings.sort], y = b[settings.sort];
     return x == null || y == null ? (x == null) - (y == null) : (x - y) * sign;
   };
-  matched.sort((a, b) => byMetric(a, b) || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || a.asin.localeCompare(b.asin));
+  matched.sort((a, b) => byMetric(a, b) || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || a.campaignId.localeCompare(b.campaignId) || a.adGroupId.localeCompare(b.adGroupId) || a.asin.localeCompare(b.asin));
   const total = matched.length;
   // A page past the end (the results shrank since it was asked for, after a sync say) gives the
   // last page instead, so the card keeps its rows and pager.

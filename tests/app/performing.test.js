@@ -12,7 +12,7 @@ const page = (page, rows, settings = perfSettings()) => ({
 });
 const perfSettings = (overrides = {}) => ({ name: "Performing Search Terms", description: "", showTracked: true, hideAsins: true, hideKeywords: false, sort: "conversion", dir: "desc", filters: { conversion: { min: 15 } }, track: ["impressions", "clicks", "orders", "sales", "conversion"], order: [], ...overrides });
 const rows = [
-  { term: "best term", sponsored: "Products", impressions: 400, clicks: 20, orders: 8, sales: 40, conversion: 40 },
+  { term: "best term", sponsored: "Products", campaignId: "1001", adGroupId: "2002", impressions: 400, clicks: 20, orders: 8, sales: 40, conversion: 40 },
   { term: "middle term", sponsored: "Products", impressions: 300, clicks: 15, orders: 4, sales: 20, conversion: 26.7 },
   { term: "strong asin term", sponsored: "Products", impressions: 200, clicks: 10, orders: 4, sales: 20, conversion: 40, asin: "B0PERFORMS1" },
   { term: "weak term", sponsored: "Products", impressions: 100, clicks: 5, orders: 0, sales: 0, conversion: 0 },
@@ -80,7 +80,11 @@ describe("Performing Search Terms card", () => {
     // Each card shows its own data under its own settings.
     expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Wasted terms");
     expect(document.querySelector("[data-hacos-card] h3").textContent).toBe("Costly terms");
-    expect(document.querySelector("[data-perf-card] tbody tr[data-k]").textContent).toContain("best term");
+    const firstRow = document.querySelector("[data-perf-card] tbody tr[data-k]");
+    expect(firstRow.textContent).toContain("best term");
+    const columns = [...document.querySelectorAll("[data-perf-card] thead th")].map(th => th.dataset.gcol);
+    expect(firstRow.children[columns.indexOf("campaignId")].textContent).toBe("1001");
+    expect(firstRow.children[columns.indexOf("adGroupId")].textContent).toBe("2002");
     // Editing the Performing card saves to its endpoint alone, with the same columns.
     document.querySelector("[data-edit=perf]").click();
     document.querySelector(".modal-wrap [data-z=name]").value = "Winning terms";

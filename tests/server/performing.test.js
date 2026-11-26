@@ -41,6 +41,26 @@ describe("Performing Search Terms defaults", () => {
 });
 
 describe("zeroSales with the Performing Search Terms defaults", () => {
+  it("filters each campaign and ad group before another group's clicks can dilute conversion", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SB_SEARCH", start: to, end: to, rows: [
+      { product: "SB_SEARCH", date: to, campaignId: "jump", adGroupId: "pink", term: "battle ropes", impressions: 289, clicks: 3, cost: 3, orders: 1, units: 1, sales: 24.99 },
+      { product: "SB_SEARCH", date: to, campaignId: "other", adGroupId: "pink", term: "battle ropes", impressions: 500, clicks: 21, cost: 10, orders: 0, units: 0, sales: 0 },
+      { product: "SB_SEARCH", date: to, campaignId: "battle", adGroupId: "pink", term: "workout equipment", impressions: 124, clicks: 1, cost: 1, orders: 1, units: 1, sales: 25.99 },
+      { product: "SB_SEARCH", date: to, campaignId: "battle", adGroupId: "black", term: "workout equipment", impressions: 600, clicks: 9, cost: 5, orders: 0, units: 0, sales: 0 },
+    ], syncedAt: "now" });
+    for (const [campaign, group] of [["jump", "pink"], ["other", "pink"], ["battle", "pink"], ["battle", "black"]]) {
+      await db.execute({ sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', ?, ?, 'B0PRODUCTA', ?, ?, ?)", args: [profileId, campaign, group, to, to, to] });
+    }
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS });
+    expect(data.rows.map(r => [r.term, r.campaignId, r.adGroupId, r.clicks, r.orders])).toEqual([
+      ["workout equipment", "battle", "pink", 1, 1],
+      ["battle ropes", "jump", "pink", 3, 1],
+    ]);
+    expect(data.rows[0].conversion).toBe(100);
+    expect(data.rows[1].conversion).toBeCloseTo(100 / 3);
+  });
+
   it("keeps terms from 15% conversion up, best first, and hides ASIN terms", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, rows: [

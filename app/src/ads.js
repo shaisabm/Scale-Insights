@@ -79,7 +79,8 @@
   const performingDefaults = () => JSON.parse(JSON.stringify(PERFORMING_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
-  const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
+  const sampleGroup = i => ({ campaignId: String(100000000000 + i), adGroupId: String(200000000000 + i) });
+  const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], ...sampleGroup(i), impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
   // High ACOS sample rows as [term, impressions, clicks, spend, sales, orders]; the last two sit
   // below the card's default 50% filter, and one is an ASIN, so each setting has something to do.
   const ACOS_TERMS = [
@@ -88,7 +89,7 @@
     ["boxing jump rope", 900, 12, 10.8, 9.99, 1], ["jump rope workout", 2000, 25, 19.5, 26.4, 2], ["rope skipping", 800, 10, 7.9, 8.5, 1],
     ["jump rope for kids", 3400, 30, 8.2, 25.0, 3], ["leather jump rope", 1100, 14, 5.5, 22.0, 2],
   ];
-  const acosRow = ([term, impressions, clicks, spend, sales, orders], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100, conversion: (orders / clicks) * 100, acos: (spend / sales) * 100, roas: sales / spend, pl: sales - spend, breakEvenBid: null });
+  const acosRow = ([term, impressions, clicks, spend, sales, orders], i) => ({ term, sponsored: "Products", p: P[i % 2], ...sampleGroup(i), impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100, conversion: (orders / clicks) * 100, acos: (spend / sales) * 100, roas: sales / spend, pl: sales - spend, breakEvenBid: null });
   // Performing Search Terms sample rows as [term, impressions, clicks, spend, sales, orders]; the
   // last two sit below the card's default 15% conversion filter, and one is an ASIN.
   const PERFORMING_TERMS = [
@@ -162,7 +163,9 @@
   // Columns follow the order their headers were dragged into (settings.order); any it doesn't
   // list, such as a metric tracked later, keep their usual order after the ones it does.
   const zeroCols = s => {
-    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
+    const idCell = v => `<span class="clamp2">${SP.esc(v ?? "")}</span>`;
+    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: idCell },
+      { key: "campaignId", label: "Campaign ID", w: 130, fmt: idCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: idCell },
       ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
     const order = s.order || [], rank = c => (order.includes(c.key) ? order.indexOf(c.key) : order.length);
     return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);

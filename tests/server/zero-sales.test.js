@@ -39,7 +39,7 @@ describe("search term reports", () => {
     ]);
   });
 
-  it("groups by advertised product before filtering zero-order terms and pages seven at a time", async () => {
+  it("keeps ad groups separate while filtering zero-order terms and pages seven at a time", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     const sp = Array.from({ length: 8 }, (_, i) => searchRow(`term ${i}`, 30 - i));
     sp.push(searchRow("term 0", 5, { campaignId: "other" }));
@@ -56,9 +56,9 @@ describe("search term reports", () => {
     const first = await zeroSales(db, { profileId, from, to });
     expect(first.total).toBe(9);
     expect(first.rows).toHaveLength(7);
-    expect(first.rows[0]).toMatchObject({ term: "term 0", sponsored: "Products", impressions: 200, pl: -35 });
+    expect(first.rows[0]).toMatchObject({ term: "term 0", campaignId: "1", adGroupId: "2", sponsored: "Products", impressions: 100, pl: -30 });
     expect(first.rows.every(r => r.term !== "B0ABC12345" && r.term !== "term with a sale")).toBe(true);
-    expect(first.totals).toMatchObject({ impressions: 800, clicks: 80, pl: -194 });
+    expect(first.totals).toMatchObject({ impressions: 700, clicks: 70, pl: -189 });
     const second = await zeroSales(db, { profileId, from, to, page: 1 });
     expect(second.rows.map(r => r.term)).toEqual(["term 7", "brand term"]);
     expect(second.rows[1].pl).toBeNull();

@@ -7,8 +7,8 @@ export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", 
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
 export const UNAVAILABLE_METRICS = ["breakEvenBid"];
 const usable = k => ZERO_METRICS.includes(k) && !UNAVAILABLE_METRICS.includes(k);
-// The card's column keys (product, ad type, search term, then the metrics), for its saved order.
-export const ZERO_COLUMNS = ["p", "sp", "term", ...ZERO_METRICS];
+// The card's column keys (product, ad type, search term, campaign, ad group, then metrics).
+export const ZERO_COLUMNS = ["p", "sp", "term", "campaignId", "adGroupId", ...ZERO_METRICS];
 
 export const ZERO_DEFAULTS = Object.freeze({
   name: "Search Terms with 0 Sales",

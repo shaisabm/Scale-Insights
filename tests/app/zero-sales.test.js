@@ -108,7 +108,7 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Wasted search terms"));
     expect(document.querySelector(".modal-wrap")).toBeNull();
     expect(document.querySelector("[data-zero-card] footer").textContent).toBe("Negate these.");
-    expect([...document.querySelectorAll("[data-zero-card] thead th")].map(th => th.textContent.replace(/[↓↑]/g, "").trim())).toEqual(["Product", "Sponsored", "Search term", "Impressions", "Clicks", "Orders"]);
+    expect([...document.querySelectorAll("[data-zero-card] thead th")].map(th => th.textContent.replace(/[↓↑]/g, "").trim())).toEqual(["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID", "Impressions", "Clicks", "Orders"]);
   });
 
   it("lets column headers be dragged left or right, and saves the new order", async () => {
@@ -121,26 +121,26 @@ describe("Search Terms with 0 Sales card", () => {
     vi.stubGlobal("fetch", fetch);
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
-    expect(labels()).toEqual(["Product", "Sponsored", "Search term", "Impressions", "Clicks", "P&L"]);
+    expect(labels()).toEqual(["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID", "Impressions", "Clicks", "P&L"]);
     expect(header("Clicks").getAttribute("draggable")).toBe("true");
 
     // Dragged left onto Impressions, P&L lands before it, and its cells move with it.
     drag("P&L", "Impressions");
-    expect(labels()).toEqual(["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"]);
-    expect([...document.querySelector("[data-zero-card] .sumrow").children].map(td => td.textContent.trim()).slice(3)).toEqual(["($75.35)", "11,222", "103"]);
-    await vi.waitFor(() => expect(saved?.order).toEqual(["p", "sp", "term", "pl", "impressions", "clicks"]));
+    expect(labels()).toEqual(["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID", "P&L", "Impressions", "Clicks"]);
+    expect([...document.querySelector("[data-zero-card] .sumrow").children].map(td => td.textContent.trim()).slice(5)).toEqual(["($75.35)", "11,222", "103"]);
+    await vi.waitFor(() => expect(saved?.order).toEqual(["p", "sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks"]));
 
     // Dragged right onto Clicks, Product lands after it.
     drag("Product", "Clicks");
-    expect(labels()).toEqual(["Sponsored", "Search term", "P&L", "Impressions", "Clicks", "Product"]);
-    await vi.waitFor(() => expect(saved.order).toEqual(["sp", "term", "pl", "impressions", "clicks", "p"]));
+    expect(labels()).toEqual(["Sponsored", "Search term", "Campaign ID", "Ad group ID", "P&L", "Impressions", "Clicks", "Product"]);
+    await vi.waitFor(() => expect(saved.order).toEqual(["sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks", "p"]));
 
     // Saving the Edit dialog keeps the order.
     saved = null;
     document.querySelector("[data-edit=st0]").click();
     document.querySelector(".modal-wrap [data-ok]").click();
     await vi.waitFor(() => expect(saved).not.toBeNull());
-    expect(saved.order).toEqual(["sp", "term", "pl", "impressions", "clicks", "p"]);
+    expect(saved.order).toEqual(["sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks", "p"]);
   });
 
   it("keeps a dragged column order when a page that was already loading arrives afterwards", async () => {
@@ -158,7 +158,7 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
     document.querySelector("[data-zero-card] [data-zero-next]").click();
     drag("P&L", "Impressions");
-    const moved = ["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"];
+    const moved = ["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID", "P&L", "Impressions", "Clicks"];
     expect(labels()).toEqual(moved);
     // Page 2 was read before the drag, with the old order.
     pending.resolve(json({ ...response(1), settings: savedSettings([]) }));
@@ -180,12 +180,12 @@ describe("Search Terms with 0 Sales card", () => {
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
     drag("P&L", "Impressions");
-    const moved = ["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"];
+    const moved = ["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID", "P&L", "Impressions", "Clicks"];
     expect(labels()).toEqual(moved);
     // Page 2 is requested while the drag's save is still going; only then does the save land,
     // so the page's reply carries the old order even though nothing is pending any more.
     document.querySelector("[data-zero-card] [data-zero-next]").click();
-    save.resolve(json({ settings: savedSettings(["p", "sp", "term", "pl", "impressions", "clicks"]) }));
+    save.resolve(json({ settings: savedSettings(["p", "sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks"]) }));
     await new Promise(resolve => setTimeout(resolve, 20));
     page.resolve(json({ ...response(1), settings: savedSettings([]) }));
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]").textContent).toContain("search term 8"));
@@ -211,7 +211,7 @@ describe("Search Terms with 0 Sales card", () => {
     expect(saves).toHaveLength(1);
     saves[0].reply.resolve(json({ settings: savedSettings(saves[0].order) }));
     await vi.waitFor(() => expect(saves).toHaveLength(2));
-    expect(saves.map(x => x.order)).toEqual([["p", "sp", "term", "pl", "impressions", "clicks"], ["clicks", "p", "sp", "term", "pl", "impressions"]]);
+    expect(saves.map(x => x.order)).toEqual([["p", "sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks"], ["clicks", "p", "sp", "term", "campaignId", "adGroupId", "pl", "impressions"]]);
     saves[1].reply.resolve(json({ settings: savedSettings(saves[1].order) }));
   });
 
@@ -232,7 +232,7 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(saves).toHaveLength(1));
     // A column moves while the dialog's save is still going.
     drag("P&L", "Impressions");
-    const moved = ["p", "sp", "term", "pl", "impressions", "clicks"];
+    const moved = ["p", "sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks"];
     saves[0].reply.resolve(json({ settings: saves[0].body }));
     await vi.waitFor(() => expect(saves).toHaveLength(2));
     // The save sent last carries both changes.
@@ -261,7 +261,7 @@ describe("Search Terms with 0 Sales card", () => {
     // The next save sends the settings as they were, with the new column order.
     drag("P&L", "Impressions");
     await vi.waitFor(() => expect(bodies).toHaveLength(2));
-    expect([bodies[1].name, bodies[1].order]).toEqual(["Search Terms with 0 Sales", ["p", "sp", "term", "pl", "impressions", "clicks"]]);
+    expect([bodies[1].name, bodies[1].order]).toEqual(["Search Terms with 0 Sales", ["p", "sp", "term", "campaignId", "adGroupId", "pl", "impressions", "clicks"]]);
   });
 
   it("redraws the card without a refused edit that a page load showed meanwhile", async () => {
@@ -339,12 +339,12 @@ describe("Search Terms with 0 Sales card", () => {
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
     const heads = () => [...document.querySelectorAll("[data-zero-card] thead th")].map(th => th.textContent.replace(/[↓↑]/g, "").trim());
-    expect(heads()).toEqual(["Product", "Sponsored", "Search term", "Orders", "ROAS", "Spend"]);
+    expect(heads()).toEqual(["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID", "Orders", "ROAS", "Spend"]);
     expect(document.querySelector("[data-zero-card] tbody tr").textContent).toContain("$4.50");
     expect(document.querySelector("[data-zero-card] tbody tr").textContent).toContain("2.00");
     show = false;
     document.querySelector("[data-apply]").click();
-    await vi.waitFor(() => expect(heads()).toEqual(["Product", "Sponsored", "Search term"]));
+    await vi.waitFor(() => expect(heads()).toEqual(["Product", "Sponsored", "Search term", "Campaign ID", "Ad group ID"]));
   });
 
   it("applies settings to sample data without saving anything", async () => {
@@ -425,8 +425,8 @@ describe("Search Terms with 0 Sales card", () => {
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]")).not.toBeNull());
     const card = document.querySelector("[data-zero-card]");
-    // The metric cells come after Product, Sponsored and Search term.
-    const metrics = tr => [...tr.children].slice(3).map(td => td.textContent.trim());
+    // The metric cells come after Product, Sponsored, Search term and the two IDs.
+    const metrics = tr => [...tr.children].slice(5).map(td => td.textContent.trim());
     const [none, sold] = card.querySelectorAll("tbody tr[data-k]");
     expect(metrics(none)).toEqual(["4", "", "", "", "", "", ""]);
     expect(metrics(sold)).toEqual(["10", "2", "3", "20.00%", "25.00%", "4.00", "$40.00"]);
