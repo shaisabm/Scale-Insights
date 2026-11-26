@@ -29,11 +29,17 @@ describe("Search Terms with 0 Sales card", () => {
     const card = document.querySelector("[data-zero-card]");
     expect(document.body.textContent).toContain("Live data for this insight is not connected yet.");
     expect(document.body.textContent).not.toContain("cordless jump rope");
-    const bodyRows = () => [...card.querySelectorAll("tbody tr:not(.sumrow)")];
+    const bodyRows = () => [...card.querySelectorAll("tbody tr[data-k]")];
     expect(bodyRows()).toHaveLength(7);
     expect(bodyRows()[0].textContent).toContain("search term 1");
     expect(card.querySelector(".sumrow").textContent).toContain("11,222");
     expect(card.querySelector(".sumrow").textContent).toContain("103");
+    // The pager is the table's last row, right under the totals and as wide as the table.
+    const pagerRow = card.querySelector("[data-zero-pager]").closest("tr");
+    expect(pagerRow.previousElementSibling.classList.contains("sumrow")).toBe(true);
+    expect(pagerRow.nextElementSibling).toBeNull();
+    expect(pagerRow.querySelector("td").getAttribute("colspan")).toBe(String(card.querySelector(".sumrow").children.length));
+    expect(pagerRow.textContent).toContain("Page 1 of 2");
     card.querySelector("[data-zero-next]").click();
     await vi.waitFor(() => expect(bodyRows()[0].textContent).toContain("search term 8"));
     expect(bodyRows()).toHaveLength(4);
@@ -121,7 +127,7 @@ describe("Search Terms with 0 Sales card", () => {
     vi.stubGlobal("fetch", fetch);
     openApp("/Ads", { env: "preview", realData: false });
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
-    expect(document.querySelectorAll("[data-zero-card] tbody tr:not(.sumrow)")).toHaveLength(6);
+    expect(document.querySelectorAll("[data-zero-card] tbody tr[data-k]")).toHaveLength(6);
     document.querySelector("[data-edit=st0]").click();
     document.querySelector(".modal-wrap [data-z=hideKeywords]").checked = true;
     document.querySelector(".modal-wrap [data-ok]").click();
@@ -175,17 +181,27 @@ describe("Search Terms with 0 Sales card", () => {
     expect(document.querySelector("[data-zero-card] .zero-product")).not.toBeNull();
   });
 
-  it("splits the thumbnail between the products a shared ad group advertises", async () => {
+  it("marks a shared ad group's row with a count badge, and shows every product's photo on hover", async () => {
     stubNavigation();
     const products = [{ asin: "B0PRODUCTA", title: "Pink Ropes", image: "/api/ads/product-image?asin=B0PRODUCTA" }, { asin: "B0PRODUCTB", title: "", image: null }];
     const body = { ...response(0), rows: [{ term: "battle ropes", sponsored: "Products", impressions: 5, clicks: 2, pl: -3, asin: "B0PRODUCTA,B0PRODUCTB", title: "Pink Ropes", image: products[0].image, products }] };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })));
     openApp("/Ads");
-    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] .zero-split")).not.toBeNull());
-    const split = document.querySelector("[data-zero-card] .zero-split");
-    // Each product is named, by its ASIN where it has no title.
-    expect(split.getAttribute("title")).toBe("Pink Ropes + B0PRODUCTB");
-    expect([...split.children].map(c => (c.tagName === "IMG" ? c.getAttribute("src") : c.className))).toEqual(["/api/ads/product-image?asin=B0PRODUCTA", "zero-split-none"]);
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] [data-zero-multi]")).not.toBeNull());
+    const multi = document.querySelector("[data-zero-card] [data-zero-multi]");
+    // The first product's photo at full size, a badge counting the others, and every product named.
+    expect(multi.querySelector(":scope > img.zero-thumb").getAttribute("src")).toBe("/api/ads/product-image?asin=B0PRODUCTA");
+    expect(multi.querySelector(".zero-count").textContent).toBe("+1");
+    expect(multi.getAttribute("aria-label")).toBe("Pink Ropes + B0PRODUCTB");
+    expect(multi.getAttribute("tabindex")).toBe("0");
+    // The hover panel shows each product's photo side by side, named by title and ASIN.
+    const panel = multi.querySelector(".zero-pop");
+    expect([...panel.querySelectorAll("figure")].map(f => [f.querySelector("img")?.getAttribute("src") ?? null, f.querySelector("figcaption").textContent]))
+      .toEqual([["/api/ads/product-image?asin=B0PRODUCTA", "Pink RopesB0PRODUCTA"], [null, "B0PRODUCTB"]]);
+    // Hovering places the panel beside the photo, outside the table's scrolling area.
+    multi.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    expect(panel.style.left).not.toBe("");
+    expect(document.querySelector("[data-zero-card] .zero-split")).toBeNull();
   });
 
   it("offers every date range preset and asks for the picked dates", async () => {

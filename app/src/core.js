@@ -372,6 +372,8 @@
       return `<tr data-k="${key}">${g.check ? `<td class="c"><input type="checkbox" data-gchk="${key}" ${g.checked.has(key) ? "checked" : ""} aria-label="Select row"></td>` : ""}${g.details ? `<td class="l"><button class="details-btn" data-gdet="${key}">Details ${SP.svg(I.chevron, open ? "up" : "")}</button></td>` : ""}${cols.map(c => cell(c, r)).join("")}</tr>${open && g.details ? `<tr class="detrow"><td colspan="${span}">${g.details(r)}</td></tr>` : ""}`;
     }).join("");
     if (!g.sumTop) h += sumRow;
+    // `below`: HTML for a full-width last row, such as a card's own pager under the totals.
+    if (g.below && rows.length) h += `<tr class="grid-below"><td colspan="${span}">${g.below}</td></tr>`;
     if (!rows.length) h += `<tr class="empty"><td colspan="${span}">${g.empty || "No records found."}</td></tr>`;
     return h;
   }

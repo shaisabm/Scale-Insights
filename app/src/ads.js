@@ -91,11 +91,14 @@
   }
   const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
-  // A row naming several products (an ad group advertising them all) splits the thumbnail between them.
+  // A row naming several products (an ad group advertising them all) shows the first one's photo with
+  // a badge counting the rest; hovering or focusing it opens a panel with every product side by side.
+  const zeroPhoto = (x, cls) => x.image ? `<img class="${cls}" src="${SP.esc(x.image)}" alt="" loading="lazy">` : `<span class="${cls} zero-none" aria-hidden="true">▣</span>`;
   const zeroProduct = (p, r) => {
     if (r.products.length > 1) {
       const names = r.products.map(x => x.title || x.asin).join(" + ");
-      return `<span class="zero-thumb zero-split" title="${SP.esc(names)}" role="img" aria-label="${SP.esc(names)}">${r.products.map(x => (x.image ? `<img src="${SP.esc(x.image)}" alt="" loading="lazy">` : `<span class="zero-split-none"></span>`)).join("")}</span>`;
+      const panel = r.products.map(x => `<figure>${zeroPhoto(x, "zero-pop-img")}<figcaption>${x.title ? `<span class="clamp2">${SP.esc(x.title)}</span>` : ""}<small>${SP.esc(x.asin)}</small></figcaption></figure>`).join("");
+      return `<span class="zero-multi" data-zero-multi tabindex="0" role="img" aria-label="${SP.esc(names)}">${zeroPhoto(r.products[0], "zero-thumb")}<span class="zero-count" aria-hidden="true">+${r.products.length - 1}</span><span class="zero-pop" aria-hidden="true">${panel}</span></span>`;
     }
     return r.image ? `<img class="zero-thumb" src="${SP.esc(r.image)}" alt="${SP.esc(r.title || r.asin)}" title="${SP.esc(r.title || r.asin)}" loading="lazy">`
       : p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>`;
@@ -125,7 +128,8 @@
   };
   const zeroCols = s => [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
     ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null ? "" : f(v)) }))];
-  const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: zeroCols(s), rows: zeroRows(data), sum: data.totals })}${zeroPager(data)}`;
+  // The pager is the table's last row, so it sits right under the totals at the table's right edge.
+  const zeroBody = (data, s) => `${zeroStatus(data)}${SP.grid({ id: "i1", search: false, noFoot: true, cls: "fit", cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   const zeroEdit = s => {
     const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
     const rows = ZERO_METRICS.map(([k, label]) => {
@@ -220,6 +224,17 @@
         range = { from: e.detail.from, to: e.detail.to };
         fetchPage(0);
       });
+      // A shared ad group's product panel is fixed to the page beside the photo (CSS shows it), so the
+      // table's scrolling wrapper can't clip it. It goes on the right, or the left if there's no room.
+      const placePanel = e => {
+        const multi = e.target.closest?.("[data-zero-multi]"), pop = multi && $(".zero-pop", multi);
+        if (!pop) return;
+        const at = multi.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+        pop.style.left = `${at.right + 8 + w <= innerWidth - 8 ? at.right + 8 : Math.max(8, at.left - 8 - w)}px`;
+        pop.style.top = `${Math.max(8, Math.min(at.top + at.height / 2 - h / 2, innerHeight - h - 8))}px`;
+      };
+      root.addEventListener("mouseover", placePanel);
+      root.addEventListener("focusin", placePanel);
     },
   };
   SP.pages["/Ads/Insights"] = SP.pages["/Ads"];
