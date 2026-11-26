@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
+import { refreshNames } from "./names.js";
 import { refreshProducts } from "./products.js";
 
 // Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands and Sponsored
@@ -378,6 +379,9 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   if (products.some(p => SEARCH_PRODUCTS.includes(p)) && typeof ads.request === "function") {
     try { await refreshProducts(db, ads, profileId, iso()); }
     catch (err) { summary.errors.push(`Product details: ${err.message}`); }
+    // It also shows each search term's campaign and ad group by name.
+    try { await refreshNames(db, ads, profileId, iso()); }
+    catch (err) { summary.errors.push(`Campaign names: ${err.message}`); }
   }
   return summary;
 }

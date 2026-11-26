@@ -39,7 +39,7 @@ describe("search term reports", () => {
     ]);
   });
 
-  it("groups by advertised product before filtering zero-order terms and pages seven at a time", async () => {
+  it("scores each campaign and ad group's search terms before filtering zero-order ones, seven a page", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     const sp = Array.from({ length: 8 }, (_, i) => searchRow(`term ${i}`, 30 - i));
     sp.push(searchRow("term 0", 5, { campaignId: "other" }));
@@ -54,11 +54,12 @@ describe("search term reports", () => {
     ], syncedAt: "now" });
     await scanOn(db, "2026-11-22", sbAd("2", ["B0PRODUCTA"]));
     const first = await zeroSales(db, { profileId, from, to });
+    // "term 0" in the other campaign is its own row, below the $10 spend minimum.
     expect(first.total).toBe(9);
     expect(first.rows).toHaveLength(7);
-    expect(first.rows[0]).toMatchObject({ term: "term 0", sponsored: "Products", impressions: 200, pl: -35 });
+    expect(first.rows[0]).toMatchObject({ term: "term 0", sponsored: "Products", impressions: 100, pl: -30 });
     expect(first.rows.every(r => r.term !== "B0ABC12345" && r.term !== "term with a sale")).toBe(true);
-    expect(first.totals).toMatchObject({ impressions: 800, clicks: 80, pl: -194 });
+    expect(first.totals).toMatchObject({ impressions: 700, clicks: 70, pl: -189 });
     const second = await zeroSales(db, { profileId, from, to, page: 1 });
     expect(second.rows.map(r => r.term)).toEqual(["term 7", "brand term"]);
     expect(second.rows[1].pl).toBeNull();
@@ -197,12 +198,35 @@ describe("search term reports", () => {
     }
   });
 
+  it("scores each search term per campaign and ad group, named from the campaign lists", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, syncedAt: "now", rows: [
+      searchRow("jump rope", 20, { clicks: 10 }),
+      { ...searchRow("jump rope", 4, { campaignId: "3", adGroupId: "4", clicks: 4, orders: 1 }), sales: 25 },
+    ] });
+    await storeWindow(db, { profileId, product: "SP", start: to, end: to, syncedAt: "now", rows: [["1", "2"], ["3", "4"]].map(([campaignId, adGroupId]) => (
+      { date: to, campaignId, adGroupId, asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 })) });
+    await db.batch([
+      { sql: "INSERT INTO ads_names (profile_id, ad_product, kind, id, name, updated_at) VALUES (?, 'SP', 'campaign', '3', 'Exact - Jump Rope', 't')", args: [profileId] },
+      { sql: "INSERT INTO ads_names (profile_id, ad_product, kind, id, name, updated_at) VALUES (?, 'SP', 'adGroup', '4', 'Exact', 't')", args: [profileId] },
+    ], "write");
+    const settings = { ...structuredClone(ZERO_DEFAULTS), filters: { conversion: { min: 15 } } };
+    // Together the two ad groups convert 1 in 14 (7%); on its own, the second converts 1 in 4.
+    const result = await zeroSales(db, { profileId, from, to, settings });
+    expect(result.rows.map(r => [r.term, r.campaign, r.adGroup, r.conversion])).toEqual([["jump rope", "Exact - Jump Rope", "Exact", 25]]);
+    // An ad group whose names haven't been listed yet shows its IDs.
+    const all = await zeroSales(db, { profileId, from, to, settings: { ...settings, filters: {} } });
+    expect(all.rows.map(r => [r.campaign, r.adGroup, r.clicks]).sort()).toEqual([["Campaign 1", "Ad group 2", 10], ["Exact - Jump Rope", "Exact", 4]]);
+  });
+
   it("refreshes product details when it syncs search terms", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SP", start: to, end: to, rows: [{ date: to, campaignId: "1", adGroupId: "2", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 }], syncedAt: "now" });
     const ads = {
       async request(method, path) {
         if (path === "/product/metadata") return { status: 200, data: { ProductMetadataList: [{ asin: "B0PRODUCTA", title: "Battle Ropes", imageUrl: "https://m.media-amazon.com/images/I/a.jpg" }] } };
+        if (path.endsWith("/campaigns/list")) return { status: 200, data: { campaigns: [{ campaignId: "1", name: "Exact - Jump Rope" }] } };
+        if (path.endsWith("/adGroups/list")) return { status: 200, data: { adGroups: [{ adGroupId: "2", campaignId: "1", name: "Exact" }] } };
         return { status: 200, data: { ads: [] } };
       },
       async createReport(profile, spec) { return `report-${spec.configuration.reportTypeId}-${spec.startDate}`; },
@@ -212,6 +236,8 @@ describe("search term reports", () => {
     const summary = await syncAds({ db, ads, profileId, products: ["SP_SEARCH"], now: () => Date.UTC(2026, 10, 22, 15), budgetMs: 30_000, sleep: async () => {} });
     expect(summary.errors).toEqual([]);
     expect((await db.execute("SELECT title FROM ads_products WHERE asin = 'B0PRODUCTA'")).rows[0].title).toBe("Battle Ropes");
+    // Campaign and ad group names come along too.
+    expect((await db.execute("SELECT name FROM ads_names WHERE ad_product = 'SP' AND kind = 'adGroup' AND id = '2'")).rows[0].name).toBe("Exact");
   });
 
   it("works out every metric and applies the saved filters, sort and hide options", async () => {
