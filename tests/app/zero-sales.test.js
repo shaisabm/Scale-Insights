@@ -149,6 +149,8 @@ describe("Search Terms with 0 Sales card", () => {
     let loads = 0;
     vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
       if (init.method === "PUT") return json({ settings: JSON.parse(init.body) });
+      // Only the zero-sales card's loads are choreographed; the other card's resolve at once.
+      if (!String(url).includes("/api/ads/zero-sales")) return json(response(0));
       // The first load answers at once; the second waits until the test releases it.
       return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : pending.promise;
     }));
@@ -160,6 +162,32 @@ describe("Search Terms with 0 Sales card", () => {
     expect(labels()).toEqual(moved);
     // Page 2 was read before the drag, with the old order.
     pending.resolve(json({ ...response(1), settings: savedSettings([]) }));
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]").textContent).toContain("search term 8"));
+    expect(labels()).toEqual(moved);
+  });
+
+  it("keeps a dragged column order when a page load started while its save was still going", async () => {
+    stubNavigation();
+    const save = later(), page = later();
+    let loads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return save.promise;
+      // Only the zero-sales card's loads are choreographed; the other card's resolve at once.
+      if (!String(url).includes("/api/ads/zero-sales")) return json(response(0));
+      // The first load answers at once; the pager's load waits until the test releases it.
+      return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : page.promise;
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    drag("P&L", "Impressions");
+    const moved = ["Product", "Sponsored", "Search term", "P&L", "Impressions", "Clicks"];
+    expect(labels()).toEqual(moved);
+    // Page 2 is requested while the drag's save is still going; only then does the save land,
+    // so the page's reply carries the old order even though nothing is pending any more.
+    document.querySelector("[data-zero-card] [data-zero-next]").click();
+    save.resolve(json({ settings: savedSettings(["p", "sp", "term", "pl", "impressions", "clicks"]) }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    page.resolve(json({ ...response(1), settings: savedSettings([]) }));
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] tbody tr[data-k]").textContent).toContain("search term 8"));
     expect(labels()).toEqual(moved);
   });
@@ -242,6 +270,7 @@ describe("Search Terms with 0 Sales card", () => {
     let loads = 0;
     vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
       if (init.method === "PUT") return save.promise;
+      if (!String(url).includes("/api/ads/zero-sales")) return json(response(0));
       return ++loads === 1 ? json({ ...response(0), settings: savedSettings([]) }) : page.promise;
     }));
     openApp("/Ads");
@@ -336,7 +365,11 @@ describe("Search Terms with 0 Sales card", () => {
     stubNavigation();
     const replies = [];
     const json = body => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(resolve => replies.push(body => resolve(json(body))))));
+    vi.stubGlobal("fetch", vi.fn(url => {
+      // Only the zero-sales card's loads are held for the test to release; the other card's resolve at once.
+      if (!String(url).includes("/api/ads/zero-sales")) return Promise.resolve(json(response(0)));
+      return new Promise(resolve => replies.push(body => resolve(json(body))));
+    }));
     const withTerm = term => ({ ...response(0), total: 1, rows: [{ term, sponsored: "Products", impressions: 1, clicks: 1, pl: -1 }] });
     const firstRow = () => document.querySelector("[data-zero-card] tbody tr:not(.sumrow)").textContent;
     openApp("/Ads");

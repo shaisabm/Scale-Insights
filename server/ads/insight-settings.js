@@ -1,7 +1,8 @@
 import { migrate } from "../db.js";
 
-// Settings for the "Search Terms with 0 Sales" card: its name and tip, which search terms it
-// lists, how they're sorted, and which metric columns it shows. Saved per profile.
+// Settings for the search term insight cards ("Search Terms with 0 Sales", "Search Terms with
+// High ACOS"): their name and tip, which search terms they list, how they're sorted, and which
+// metric columns they show. Saved per profile and per card.
 export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "roas", "spend", "sales", "pl", "breakEvenBid"];
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
 export const UNAVAILABLE_METRICS = ["breakEvenBid"];
@@ -23,8 +24,27 @@ export const ZERO_DEFAULTS = Object.freeze({
   order: [],
 });
 
+// The High ACOS card has the same dialog and columns; its default filter is ACOS at 50% and up,
+// with the worst ACOS first.
+export const ACOS_DEFAULTS = Object.freeze({
+  name: "Search Terms with High ACOS",
+  description: "[Tip]: Use [Automation] strategies to improve your advertising results.",
+  showTracked: true,
+  hideAsins: true,
+  hideKeywords: false,
+  sort: "acos",
+  dir: "desc",
+  filters: { acos: { min: 50 } },
+  track: ["impressions", "clicks", "sales", "acos"],
+  // Column keys in the order the headers were dragged into; empty keeps the default order.
+  order: [],
+});
+
+// Each card starts from its own defaults until its settings are saved.
+export const INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS };
+
 /** { settings } with everything checked and normalized, or { error } for the first problem. */
-export function cleanZeroSettings(input) {
+export function cleanInsightSettings(input) {
   if (!input || typeof input !== "object") return { error: "Settings must be an object." };
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 80) return { error: "The name must be 1 to 80 characters." };
@@ -54,22 +74,29 @@ export function cleanZeroSettings(input) {
   return { settings: { name, description, showTracked: input.showTracked, hideAsins: input.hideAsins, hideKeywords: input.hideKeywords, sort: input.sort, dir: input.dir, filters, track, order } };
 }
 
-/** The profile's saved settings, or the defaults when none are saved (or they no longer validate). */
-export async function loadZeroSettings(db, profileId) {
+// The insight key a defaults object belongs to, which settings are stored under.
+const insightOf = defaults => Object.entries(INSIGHT_DEFAULTS).find(([, d]) => d === defaults)?.[0];
+
+// The old name the zero-sales card's callers know.
+export const cleanZeroSettings = input => cleanInsightSettings(input);
+
+/** The profile's saved settings for one insight, or its defaults when none are saved (or they no
+ * longer validate). */
+export async function loadZeroSettings(db, profileId, defaults = ZERO_DEFAULTS) {
   await migrate(db);
-  const { rows } = await db.execute({ sql: "SELECT settings FROM ads_insight_settings WHERE profile_id = ? AND insight = 'zero-sales'", args: [profileId] });
-  if (!rows.length) return structuredClone(ZERO_DEFAULTS);
+  const { rows } = await db.execute({ sql: "SELECT settings FROM ads_insight_settings WHERE profile_id = ? AND insight = ?", args: [profileId, insightOf(defaults)] });
+  if (!rows.length) return structuredClone(defaults);
   try {
-    return cleanZeroSettings(JSON.parse(rows[0].settings)).settings || structuredClone(ZERO_DEFAULTS);
+    return cleanInsightSettings(JSON.parse(rows[0].settings), defaults).settings || structuredClone(defaults);
   } catch {
-    return structuredClone(ZERO_DEFAULTS);
+    return structuredClone(defaults);
   }
 }
 
-export async function saveZeroSettings(db, profileId, settings, at = new Date().toISOString()) {
+export async function saveZeroSettings(db, profileId, settings, at = new Date().toISOString(), defaults = ZERO_DEFAULTS) {
   await migrate(db);
   await db.execute({
-    sql: "INSERT OR REPLACE INTO ads_insight_settings (profile_id, insight, settings, updated_at) VALUES (?, 'zero-sales', ?, ?)",
-    args: [profileId, JSON.stringify(settings), at],
+    sql: "INSERT OR REPLACE INTO ads_insight_settings (profile_id, insight, settings, updated_at) VALUES (?, ?, ?, ?)",
+    args: [profileId, insightOf(defaults), JSON.stringify(settings), at],
   });
 }
