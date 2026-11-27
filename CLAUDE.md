@@ -30,6 +30,28 @@ At the repo root:
 
 CI (`.github/workflows/ci.yml`) runs Lint (both configs), Typecheck and Test on every PR.
 
+## Live link
+
+The owner checks work in progress from other devices through a private Tailscale link to this machine's dev server. At the start of every session, check whether the link is running. If it isn't, start it. Either way, give the user the link.
+
+- Check from the repo root:
+
+  ```bash
+  host=$(tailscale status --json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).Self.DNSName.replace(/\.$/, "")')
+  curl -s -o /dev/null -w '%{http_code}\n' "https://$host/Ads"
+  ss -ltn | grep -q ':3005 ' || echo "dev server not running"
+  pgrep -f "[t]ailscale serve 3005" >/dev/null || echo "share not running"
+  pgrep -f "[w]atch-path=./src" >/dev/null || echo "watcher not running"
+  ```
+
+  `200` and no other output means all three are up. `tailscale serve status` says "No serve config" even while the share runs, so don't go by it.
+- Start whatever is missing, each as a long-running background process:
+  1. `vercel dev --listen 3005 --yes` at the repo root: the app and the `api/` functions with the Development variables.
+  2. `node --watch-path=./src --watch-preserve-output build.mjs` in `app/`: rebuilds `dist/` within a few seconds of each save in `app/src/`. A new file may need a `vercel dev` restart before it's served.
+  3. `tailscale serve 3005`: shares port 3005 over HTTPS with the owner's tailnet only and prints the link. It runs in the foreground, so nothing stays configured once it stops. The user is Tailscale's operator on this machine, so it needs no `sudo`. Never use `tailscale funnel`, which puts the app on the public internet, or `--bg`, which keeps the share configured.
+- Give the user `https://$host/Ads` and tell them to reload to see changes. The "Real data" switch and the app password work there because the link is HTTPS.
+- On a machine without `tailscale`, tell the user the link can't be made there.
+
 ## Amazon APIs
 
 - **Agents only read from the real profile Shaisab. They never write to it.** That holds for the Amazon Ads API, the SP-API production app and any other route, such as the deployed app's UI: no creating, changing, pausing or deleting campaigns, keywords, bids, budgets, listings, prices or anything else. When a task needs a write, do it in a sandbox, test or demo account, such as the SP-API sandbox (`sandbox.sellingpartnerapi-*.amazon.com`) or an Amazon Ads test account.
