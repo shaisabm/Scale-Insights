@@ -41,11 +41,11 @@ describe("Performing Search Terms defaults", () => {
 });
 
 describe("zeroSales with the Performing Search Terms defaults", () => {
-  it("applies the same ad-group conversion filter to two-ASIN ad groups", async () => {
+  it("combines matching two-ASIN ad groups without mixing their single-ASIN counterparts", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, rows: [
       { ...searchRow("weighted rope", 2, { impressions: 4, clicks: 2, orders: 1, sales: 25 }), campaignId: "multi", adGroupId: "winner" },
-      { ...searchRow("weighted rope", 8, { impressions: 40, clicks: 20, orders: 0, sales: 0 }), campaignId: "multi", adGroupId: "loser" },
+      { ...searchRow("weighted rope", 8, { impressions: 40, clicks: 2, orders: 0, sales: 0 }), campaignId: "multi", adGroupId: "loser" },
       { ...searchRow("weighted rope", 1, { impressions: 2, clicks: 1, orders: 1, sales: 25 }), campaignId: "single", adGroupId: "winner" },
     ], syncedAt: "now" });
     await storeWindow(db, { profileId, product: "SP", start: to, end: to, rows: [
@@ -55,32 +55,28 @@ describe("zeroSales with the Performing Search Terms defaults", () => {
       { date: to, campaignId: "single", adGroupId: "winner", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 },
     ], syncedAt: "now" });
 
-    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS, perAdGroup: true });
-    expect(data.rows.map(r => [r.asin, r.campaignId, r.adGroupId, r.term, r.clicks, r.orders, r.conversion])).toEqual([
-      ["B0PRODUCTA", "single", "winner", "weighted rope", 1, 1, 100],
-      ["B0PRODUCTA,B0PRODUCTB", "multi", "winner", "weighted rope", 2, 1, 50],
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS });
+    expect(data.rows.map(r => [r.asin, r.term, r.clicks, r.orders, r.conversion])).toEqual([
+      ["B0PRODUCTA", "weighted rope", 1, 1, 100],
+      ["B0PRODUCTA,B0PRODUCTB", "weighted rope", 4, 1, 25],
     ]);
     expect(data.total).toBe(2);
   });
 
-  it("filters each campaign and ad group before another group's clicks can dilute conversion", async () => {
+  it("filters after combining campaigns and ad groups for the same product and search term", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SB_SEARCH", start: to, end: to, rows: [
       { product: "SB_SEARCH", date: to, campaignId: "jump", adGroupId: "pink", term: "battle ropes", impressions: 289, clicks: 3, cost: 3, orders: 1, units: 1, sales: 24.99 },
-      { product: "SB_SEARCH", date: to, campaignId: "other", adGroupId: "pink", term: "battle ropes", impressions: 500, clicks: 21, cost: 10, orders: 0, units: 0, sales: 0 },
+      { product: "SB_SEARCH", date: to, campaignId: "other", adGroupId: "pink", term: "battle ropes", impressions: 500, clicks: 2, cost: 10, orders: 0, units: 0, sales: 0 },
       { product: "SB_SEARCH", date: to, campaignId: "battle", adGroupId: "pink", term: "workout equipment", impressions: 124, clicks: 1, cost: 1, orders: 1, units: 1, sales: 25.99 },
       { product: "SB_SEARCH", date: to, campaignId: "battle", adGroupId: "black", term: "workout equipment", impressions: 600, clicks: 9, cost: 5, orders: 0, units: 0, sales: 0 },
     ], syncedAt: "now" });
     for (const [campaign, group] of [["jump", "pink"], ["other", "pink"], ["battle", "pink"], ["battle", "black"]]) {
       await db.execute({ sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', ?, ?, 'B0PRODUCTA', ?, ?, ?)", args: [profileId, campaign, group, to, to, to] });
     }
-    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS, perAdGroup: true });
-    expect(data.rows.map(r => [r.term, r.campaignId, r.adGroupId, r.clicks, r.orders])).toEqual([
-      ["workout equipment", "battle", "pink", 1, 1],
-      ["battle ropes", "jump", "pink", 3, 1],
-    ]);
-    expect(data.rows[0].conversion).toBe(100);
-    expect(data.rows[1].conversion).toBeCloseTo(100 / 3);
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS });
+    expect(data.rows.map(r => [r.term, r.clicks, r.orders, r.conversion])).toEqual([["battle ropes", 5, 1, 20]]);
+    expect(data.rows[0]).not.toHaveProperty("campaignId");
   });
 
   it("keeps terms from 15% conversion up, best first, and hides ASIN terms", async () => {
@@ -94,7 +90,7 @@ describe("zeroSales with the Performing Search Terms defaults", () => {
     await storeWindow(db, { profileId, product: "SP", start: to, end: to, rows: [
       { date: to, campaignId: "1", adGroupId: "2", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 },
     ], syncedAt: "now" });
-    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS, perAdGroup: true });
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS });
     expect(data.rows.map(r => [r.term, r.conversion])).toEqual([["best term", 40], ["middle term", 20]]);
     expect(data.totals.conversion).toBeCloseTo((4 + 2) / (10 + 10) * 100);
   });
@@ -132,7 +128,7 @@ describe("GET /api/ads/performing and PUT /api/ads/performing-settings", () => {
   });
 
 
-  it("uses ad-group rows in the authenticated Performing route", async () => {
+  it("uses the same grouped conversion filter in the authenticated Performing route", async () => {
     vi.stubEnv("SESSION_SECRET", "secret");
     vi.stubEnv("TURSO_DATABASE_URL", ":memory:");
     vi.stubEnv("AMAZON_ADS_PROFILE_ID", "performing-route-grain");
@@ -149,7 +145,7 @@ describe("GET /api/ads/performing and PUT /api/ads/performing-settings", () => {
       const response = await performingRoute(new Request(`https://app.test/api/ads/performing?from=${from}&to=${to}`, { headers: cookie }));
       expect(response.status).toBe(200);
       const report = await response.json();
-      expect(report.rows.map(r => [r.term, r.campaignId, r.adGroupId, r.clicks, r.orders])).toEqual([["battle ropes", "winning", "pink", 3, 1]]);
+      expect(report.rows).toEqual([]);
     } finally {
       vi.unstubAllEnvs();
     }

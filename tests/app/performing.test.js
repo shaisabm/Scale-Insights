@@ -83,8 +83,8 @@ describe("Performing Search Terms card", () => {
     const firstRow = document.querySelector("[data-perf-card] tbody tr[data-k]");
     expect(firstRow.textContent).toContain("best term");
     const columns = [...document.querySelectorAll("[data-perf-card] thead th")].map(th => th.dataset.gcol);
-    expect(firstRow.children[columns.indexOf("campaignId")].textContent).toBe("1001");
-    expect(firstRow.children[columns.indexOf("adGroupId")].textContent).toBe("2002");
+    expect(columns).not.toContain("campaignId");
+    expect(columns).not.toContain("adGroupId");
     // Editing the Performing card saves to its endpoint alone, with the same columns.
     document.querySelector("[data-edit=perf]").click();
     document.querySelector(".modal-wrap [data-z=name]").value = "Winning terms";

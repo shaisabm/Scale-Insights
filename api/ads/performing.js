@@ -13,5 +13,5 @@ export async function GET(request) {
   if (!query) return json({ error: "Invalid search term filters." }, 400);
   if (!process.env.AMAZON_ADS_PROFILE_ID) return json({ error: "Amazon Ads is not configured." }, 500);
   const db = getDb(), profileId = process.env.AMAZON_ADS_PROFILE_ID;
-  return json(await zeroSales(db, { profileId, ...query, settings: await loadZeroSettings(db, profileId, PERFORMING_DEFAULTS), perAdGroup: true }));
+  return json(await zeroSales(db, { profileId, ...query, settings: await loadZeroSettings(db, profileId, PERFORMING_DEFAULTS) }));
 }
