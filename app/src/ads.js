@@ -399,11 +399,18 @@
     return { key, label, align: "r", fmt: v => v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : format(v) };
   });
   const searchText = v => SP.esc(v || "—");
+  const keywordState = (value, row) => {
+    const state = ["enabled", "paused", "archived"].includes(value) ? value : "unknown";
+    const label = { enabled: "Enabled", paused: "Paused", archived: "Archived", unknown: "State unavailable" }[state];
+    const title = `${label} (current keyword state)${row.stateUpdatedAt ? ` · Updated ${row.stateUpdatedAt}` : ""}`;
+    return `<span class="keyword-state ${state}" role="img" aria-label="${label}" title="${SP.esc(title)}"></span>`;
+  };
   const searchProductLabel = (v, r) => (r.products || []).map(p => `<span class="clamp2">${SP.esc(p.title || p.asin)}</span><small class="sub">${SP.esc(p.asin)}</small>`).join('<span class="sub">+</span>');
   const detailGrid = (r, id) => `<div class="detpanel search-detail">${r.details.some(d => !d.detailed) ? '<p class="muted">Keyword and match details for some dates are awaiting a report refresh. Their ad-group totals are included below.</p>' : ""}${SP.grid({ id, columns: true, pageSize: 20, cols: [
     { key: "campaignName", label: "Campaign", w: 190, fmt: (v, d) => searchText(v || d.campaignId) },
     { key: "adGroupName", label: "Ad group", w: 140, fmt: (v, d) => searchText(v || d.adGroupId) },
     { key: "keyword", label: "Keyword / target", w: 160, fmt: searchText },
+    { key: "state", label: "State", fmt: keywordState },
     { key: "matchType", label: "Match", fmt: v => searchText(v?.toLowerCase()) },
     ...searchMetricCols(["impressions", "clicks", "orders", "units", "sales", "conversion", "spend", "cpc", "acos", "roas"]),
     { key: "lastSeen", label: "Last activity", fmt: searchText },
@@ -437,7 +444,7 @@
     const rows = source.map((r, i) => {
       const items = i % 3 === 2 ? products : [products[i % 2]], sum = searchSum([r]);
       return { ...r, ...sum, asin: items.map(p => p.asin).sort().join(","), title: items[0].title, image: null, products: items,
-        details: [{ ...sum, campaignId: `campaign-${i}`, campaignName: `SP | ${r.term}`, adGroupId: `group-${i}`, adGroupName: "Broad", keyword: r.term, matchType: "BROAD", lastSeen: query.to, detailed: true }] };
+        details: [{ ...sum, campaignId: `campaign-${i}`, campaignName: `SP | ${r.term}`, adGroupId: `group-${i}`, adGroupName: "Broad", keyword: r.term, state: i % 4 === 0 ? "paused" : "enabled", matchType: "BROAD", lastSeen: query.to, detailed: true }] };
     });
     const groups = new Map();
     for (const r of rows) {

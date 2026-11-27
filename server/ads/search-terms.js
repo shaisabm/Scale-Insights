@@ -1,4 +1,5 @@
 import { metrics, within, zeroSales } from "./zero-sales.js";
+import { addKeywordStates } from "./keyword-states.js";
 
 const asinTerm = /^B0[A-Z0-9]{8}$/i;
 export const ALL_TERMS = { name: "All search terms", filters: {}, hideAsins: false, hideKeywords: false, sort: "clicks", dir: "desc", track: [], order: [], showTracked: true };
@@ -12,6 +13,7 @@ const counts = rows => {
 export async function searchTerms(db, options) {
   const settings = options.settings || ALL_TERMS;
   const all = await zeroSales(db, { ...options, settings: ALL_TERMS, page: 0, pageSize: Number.MAX_SAFE_INTEGER, includeDetails: true });
+  await addKeywordStates(db, options.profileId, all.rows);
   const rows = all.rows.filter(r => Object.entries(settings.filters).every(([k, f]) => within(r[k], f))
     && !(settings.hideAsins && asinTerm.test(r.term)) && !(settings.hideKeywords && !asinTerm.test(r.term)));
   rows.sort((a, b) => {

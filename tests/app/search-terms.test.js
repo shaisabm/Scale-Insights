@@ -10,8 +10,8 @@ const fixture = (filterId = "performing") => {
   const settings = { name: "Performing Search Terms", filters: { conversion: { min: 15 } }, hideAsins: true, sort: "conversion", dir: "desc" };
   const rows = [[productA], [productB], [productA, productB]].map((products, i) => ({ ...counts, products, asin: products.map(p => p.asin).join(","), title: products[0].title,
     sponsored: "Products", term: i ? "weighted rope" : '<img src=x onerror="bad()">', details: [
-      { ...counts, campaignName: "Campaign A", adGroupName: "Broad group", keyword: "jump rope", matchType: "BROAD", lastSeen: to, detailed: true },
-      { ...counts, campaignName: "Campaign B", adGroupName: "Exact group", keyword: '<script>bad()</script>', matchType: "EXACT", orders: 0, detailed: true },
+      { ...counts, campaignName: "Campaign A", adGroupName: "Broad group", keyword: "jump rope", state: "enabled", matchType: "BROAD", lastSeen: to, detailed: true },
+      { ...counts, campaignName: "Campaign B", adGroupName: "Exact group", keyword: '<script>bad()</script>', state: 'paused', matchType: "EXACT", orders: 0, detailed: true },
     ] }));
   return { from, to, filterId, settings, rows, products: rows.map(r => ({ ...r, clicks: 50, terms: [r] })), totals: counts, coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30, mapReady: true } }, detailComplete: true };
 };
@@ -35,6 +35,8 @@ describe("Search terms report", () => {
     terms.querySelector('[data-gdet="0"]').click();
     const details = document.querySelector('[data-grid="search-product-0-detail-0"]');
     expect(details.textContent).toContain("Campaign A");
+    expect(details.querySelector('.keyword-state.enabled').getAttribute("aria-label")).toBe("Enabled");
+    expect(details.querySelector('.keyword-state.paused').getAttribute("title")).toContain("current keyword state");
     expect(details.textContent).toContain("Campaign B");
     expect(details.textContent).toContain("Broad group");
     expect(details.textContent).toContain("broad");

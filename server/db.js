@@ -2,6 +2,12 @@ import { createClient } from "@libsql/client";
 
 // Turso (libSQL). Every statement is idempotent, so migrate() can run on each cold start.
 const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS ads_keyword_states (
+    profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, kind TEXT NOT NULL,
+    campaign_id TEXT NOT NULL, ad_group_id TEXT NOT NULL, keyword_id TEXT NOT NULL,
+    state TEXT NOT NULL, synced_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product, kind, campaign_id, ad_group_id, keyword_id)
+  )`,
   // Daily Amazon Ads numbers. SP rows are per advertised ASIN; SB rows are per campaign.
   `CREATE TABLE IF NOT EXISTS ads_daily (
     profile_id TEXT NOT NULL,

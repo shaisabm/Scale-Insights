@@ -412,3 +412,7 @@ body.hero .topbar { padding: 0 24px; }
 [data-search-results] .grid-tools { margin-bottom: 12px; }
 [data-search-results] .search-photos { display: flex; gap: 4px; }
 [data-search-error] { color: #b42318; }
+.keyword-state { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: middle; background: #a5adb6; }
+.keyword-state.enabled { background: #61ad98; }
+.keyword-state.paused { background: #e5dda0; }
+.keyword-state.archived { background: #cf7777; }

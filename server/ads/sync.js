@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
 import { refreshProducts } from "./products.js";
+import { refreshKeywordStates } from "./keyword-states.js";
 
 // Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands and Sponsored
 // Display per campaign (14-day). These match the Amazon Ads console's columns for each ad type.
@@ -353,6 +354,9 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   }
 
   await collect();
+  if (products.some(p => SEARCH_PRODUCTS.includes(p)) && typeof ads.request === "function") {
+    summary.errors.push(...await refreshKeywordStates(db, ads, profileId, { now }));
+  }
 
   const lastDate = addDays(todayIn(timeZone, now()), -1);
   const pending = await pendingRequests();

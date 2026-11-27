@@ -202,6 +202,9 @@ describe("search term reports", () => {
     await storeWindow(db, { profileId, product: "SP", start: to, end: to, rows: [{ date: to, campaignId: "1", adGroupId: "2", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 }], syncedAt: "now" });
     const ads = {
       async request(method, path) {
+        if (path === "/sp/keywords/list") return { status: 200, data: { keywords: [] } };
+        if (path === "/sp/targets/list") return { status: 200, data: { targetingClauses: [] } };
+        if (path.startsWith("/sb/keywords?")) return { status: 200, data: [] };
         if (path === "/product/metadata") return { status: 200, data: { ProductMetadataList: [{ asin: "B0PRODUCTA", title: "Battle Ropes", imageUrl: "https://m.media-amazon.com/images/I/a.jpg" }] } };
         return { status: 200, data: { ads: [] } };
       },
@@ -352,6 +355,9 @@ describe("search term reports", () => {
     const events = [], tokens = [];
     const ads = {
       async request(method, path, { body }) {
+        if (path === "/sp/keywords/list") return { status: 200, data: { keywords: [] } };
+        if (path === "/sp/targets/list") return { status: 200, data: { targetingClauses: [] } };
+        if (path.startsWith("/sb/keywords?")) return { status: 200, data: [] };
         if (path !== "/sb/v4/ads/list") return { status: 200, data: { ProductMetadataList: [] } };
         // Six pages that take ten seconds each.
         events.push("list");
