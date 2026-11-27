@@ -10,6 +10,9 @@ const usable = k => ZERO_METRICS.includes(k) && !UNAVAILABLE_METRICS.includes(k)
 // The card's column keys (product, ad type, search term, campaign, ad group, then metrics).
 export const ZERO_COLUMNS = ["p", "sp", "term", "campaignId", "adGroupId", ...ZERO_METRICS];
 
+// The rows-per-page choices every search term card offers.
+export const PAGE_SIZES = [7, 10, 20, 30, 50];
+
 export const ZERO_DEFAULTS = Object.freeze({
   name: "Search Terms with 0 Sales",
   description: "[Tip]: You can automatically remove poor performing search terms using Automation.",
@@ -22,6 +25,8 @@ export const ZERO_DEFAULTS = Object.freeze({
   track: ["impressions", "clicks", "pl"],
   // Column keys in the order the headers were dragged into; empty keeps the default order.
   order: [],
+  // Rows per page in the card's table.
+  pageSize: 7,
 });
 
 // The High ACOS card has the same dialog and columns; its default filter is ACOS at 50% and up,
@@ -38,6 +43,8 @@ export const ACOS_DEFAULTS = Object.freeze({
   track: ["impressions", "clicks", "sales", "acos"],
   // Column keys in the order the headers were dragged into; empty keeps the default order.
   order: [],
+  // Rows per page in the card's table.
+  pageSize: 7,
 });
 
 // The Performing Search Terms card has the same dialog and columns; its default filter is
@@ -54,6 +61,8 @@ export const PERFORMING_DEFAULTS = Object.freeze({
   track: ["impressions", "clicks", "orders", "sales", "conversion"],
   // Column keys in the order the headers were dragged into; empty keeps the default order.
   order: [],
+  // Rows per page in the card's table.
+  pageSize: 7,
 });
 
 // Each card starts from its own defaults until its settings are saved.
@@ -87,7 +96,10 @@ export function cleanInsightSettings(input) {
   // Settings saved before columns could be moved have no order.
   const order = input.order ?? [];
   if (!Array.isArray(order) || order.some(k => !ZERO_COLUMNS.includes(k)) || new Set(order).size !== order.length) return { error: "The column order can only list the card's columns, each once." };
-  return { settings: { name, description, showTracked: input.showTracked, hideAsins: input.hideAsins, hideKeywords: input.hideKeywords, sort: input.sort, dir: input.dir, filters, track, order } };
+  // Settings saved before the rows per page could be chosen show 7.
+  const pageSize = input.pageSize ?? 7;
+  if (!PAGE_SIZES.includes(pageSize)) return { error: "Choose 7, 10, 20, 30 or 50 rows per page." };
+  return { settings: { name, description, showTracked: input.showTracked, hideAsins: input.hideAsins, hideKeywords: input.hideKeywords, sort: input.sort, dir: input.dir, filters, track, order, pageSize } };
 }
 
 // The insight key a defaults object belongs to, which settings are stored under.

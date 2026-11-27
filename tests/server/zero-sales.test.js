@@ -158,6 +158,17 @@ describe("search term reports", () => {
     expect((await zeroSales(db, { profileId, from, to })).rows[0]).toMatchObject({ title: "Battle Ropes", image: "/api/ads/product-image?asin=B0PRODUCTA" });
   });
 
+  it("pages by the card's saved rows per page unless the request names one", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, syncedAt: "now", rows: Array.from({ length: 12 }, (_, i) => searchRow(`term ${i}`, 30 - i)) });
+    await storeWindow(db, { profileId, product: "SP", start: to, end: to, syncedAt: "now", rows: [{ date: to, campaignId: "1", adGroupId: "2", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 }] });
+    const settings = { ...structuredClone(ZERO_DEFAULTS), pageSize: 10 };
+    const saved = await zeroSales(db, { profileId, from, to, settings });
+    expect([saved.pageSize, saved.rows.length, saved.total]).toEqual([10, 10, 12]);
+    const asked = await zeroSales(db, { profileId, from, to, settings, pageSize: 20 });
+    expect([asked.pageSize, asked.rows.length]).toEqual([20, 12]);
+  });
+
   it("expects only the dates Amazon can provide to be synced", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     // Today is 2026-11-22: Amazon reports through yesterday, and keeps 90 days of Sponsored
@@ -187,6 +198,10 @@ describe("search term reports", () => {
       expect((await get("from=2026-02-30&to=2026-03-01")).status).toBe(400);
       expect(await (await get("days=7")).json()).toMatchObject({ from: addDays(today, -7), to: addDays(today, -1) });
       for (const days of ["abc", "1e9", "31", "-7"]) expect((await get(`days=${days}`)).status).toBe(400);
+      // Rows per page from the request, else the card's saved setting; only the offered sizes.
+      expect(await (await get("pageSize=20")).json()).toMatchObject({ pageSize: 20 });
+      expect(await (await get("")).json()).toMatchObject({ pageSize: 7 });
+      for (const size of ["8", "abc", "100"]) expect((await get(`pageSize=${size}`)).status).toBe(400);
       // A preset that would start before year 0 isn't a date.
       expect((await get("to=0000-01-05&days=30")).status).toBe(400);
       // 400 dates at most, counting both ends.

@@ -73,12 +73,12 @@
     ["roas", "ROAS", "ROAS", v => v.toFixed(2)], ["spend", "Spend", "Spend", money], ["sales", "Sales", "Sales", money], ["pl", "P&L", "P&amp;L", pl], ["breakEvenBid", "Break even bid", "Break even bid", money],
   ];
   const UNAVAILABLE = new Set(["breakEvenBid"]);
-  const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"], order: [] };
+  const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"], order: [], pageSize: 7 };
   // The High ACOS card runs the same machinery with its own defaults: ACOS at 50% and up, worst first.
-  const HIGH_ACOS_DEFAULTS = { name: "Search Terms with High ACOS", description: "[Tip]: Use [Automation] strategies to improve your advertising results.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "acos", dir: "desc", filters: { acos: { min: 50 } }, track: ["impressions", "clicks", "sales", "acos"], order: [] };
+  const HIGH_ACOS_DEFAULTS = { name: "Search Terms with High ACOS", description: "[Tip]: Use [Automation] strategies to improve your advertising results.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "acos", dir: "desc", filters: { acos: { min: 50 } }, track: ["impressions", "clicks", "sales", "acos"], order: [], pageSize: 7 };
   // The Performing Search Terms card runs the same machinery with its own defaults: conversion at
   // 15% and up, best converting first.
-  const PERFORMING_DEFAULTS = { name: "Performing Search Terms", description: "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "conversion", dir: "desc", filters: { conversion: { min: 15 } }, track: ["impressions", "clicks", "orders", "sales", "conversion"], order: [] };
+  const PERFORMING_DEFAULTS = { name: "Performing Search Terms", description: "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "conversion", dir: "desc", filters: { conversion: { min: 15 } }, track: ["impressions", "clicks", "orders", "sales", "conversion"], order: [], pageSize: 7 };
   const zeroDefaults = () => JSON.parse(JSON.stringify(ZERO_DEFAULTS));
   const acosDefaults = () => JSON.parse(JSON.stringify(HIGH_ACOS_DEFAULTS));
   const performingDefaults = () => JSON.parse(JSON.stringify(PERFORMING_DEFAULTS));
@@ -114,10 +114,10 @@
         const x = a[settings.sort], y = b[settings.sort];
         return x == null || y == null ? Number(x == null) - Number(y == null) : (Number(x) - Number(y)) * (settings.dir === "asc" ? 1 : -1);
       });
-    const rowsPage = all.slice(page * 7, page * 7 + 7), sum = k => rowsPage.reduce((n, r) => n + r[k], 0);
+    const size = settings.pageSize || 7, rowsPage = all.slice(page * size, (page + 1) * size), sum = k => rowsPage.reduce((n, r) => n + r[k], 0);
     const spend = sum("spend"), clicks = sum("clicks"), impressions = sum("impressions"), orders = sum("orders"), sales = sum("sales");
     return {
-      page, pageSize: 7, total: all.length, rows: rowsPage, settings,
+      page, pageSize: size, total: all.length, rows: rowsPage, settings,
       totals: { impressions, clicks, orders, units: sum("units"), spend, sales, cpc: clicks ? spend / clicks : null, ctr: impressions ? (clicks / impressions) * 100 : null, conversion: clicks ? (orders / clicks) * 100 : null, acos: sales ? (spend / sales) * 100 : null, roas: spend ? sales / spend : null, pl: sum("pl"), breakEvenBid: null },
       coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
     };
@@ -142,7 +142,16 @@
   };
   const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands" };
   const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
-  const zeroPager = data => data.total > 7 ? `<div class="zero-pager" data-zero-pager><button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${Math.ceil(data.total / 7)}</span><button data-zero-next ${data.page >= Math.ceil(data.total / 7) - 1 ? "disabled" : ""}>Next ›</button></div>` : `<div class="zero-pager" data-zero-pager></div>`;
+  // Rows per page and which rows are showing, whenever there are any; the page buttons only when
+  // there's more than one page.
+  const PAGE_SIZES = [7, 10, 20, 30, 50];
+  const zeroPager = data => {
+    if (!data.total) return `<div class="zero-pager" data-zero-pager></div>`;
+    const size = data.pageSize || 7, pages = Math.ceil(data.total / size), first = data.page * size + 1, last = Math.min(data.total, (data.page + 1) * size);
+    const sizes = `<label class="zero-size">Rows <select data-zero-size aria-label="Rows per page">${PAGE_SIZES.map(n => `<option value="${n}" ${n === size ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
+    const nav = pages > 1 ? `<button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${pages}</span><button data-zero-next ${data.page >= pages - 1 ? "disabled" : ""}>Next ›</button>` : "";
+    return `<div class="zero-pager" data-zero-pager>${sizes}<span class="zero-showing">${first === last ? first : `${first}–${last}`} of ${data.total}</span>${nav}</div>`;
+  };
   const zeroStatus = data => {
     if (!SP.usesRealData()) return "";
     const entries = Object.entries(data.coverage || {}), coverage = entries.map(([, c]) => c);
@@ -249,6 +258,8 @@
         $("h3", c.el).textContent = c.settings.name;
         $("footer", c.el).textContent = c.settings.description;
         $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid);
+        const size = $("[data-zero-size]", c.el);
+        if (size) size.value = String(next.pageSize || 7);
       };
       // Settings are saved whole, so saves run one at a time: each starts once the one before has
       // finished and sends the settings as they are then, so it carries every change made before it
@@ -266,7 +277,7 @@
       const fetchPage = (c, page) => {
         const id = ++c.latest, changes = c.changes, saving = c.pending > 0;
         if (!SP.usesRealData()) return update(c, c.sample(c.settings, page));
-        const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page) });
+        const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page), pageSize: String(c.settings.pageSize || 7) });
         return SP.api.get(`${c.api}?${query}`).then(next => {
           // A save pending at request start can land while the response is under way, so the
           // response may carry the settings from before it even with nothing pending anymore.
@@ -281,8 +292,8 @@
           const dialog = SP.modal(`Edit ${SP.esc(c.settings.name)}`, zeroEdit(c.settings), m => {
             const { settings: read, error } = readZeroEdit(m);
             if (error) { SP.toast(error); return false; }
-            // The dialog doesn't show the column order, so saving keeps it.
-            const next = { ...read, order: c.settings.order || [] };
+            // The dialog doesn't show the column order or rows per page, so saving keeps them.
+            const next = { ...read, order: c.settings.order || [], pageSize: c.settings.pageSize || 7 };
             if (!SP.usesRealData()) { c.settings = next; fetchPage(c, 0); return; }
             // Applied here first, so a save made meanwhile includes it. If the account refuses it and
             // nothing was submitted from the dialog since, its fields go back to what the account last
@@ -292,7 +303,7 @@
             c.settings = next;
             c.changes++;
             saveSettings(c).then(() => { m.remove(); fetchPage(c, 0); }, err => {
-              if (submit === c.submits) c.settings = { ...c.accepted, order: c.settings.order };
+              if (submit === c.submits) c.settings = { ...c.accepted, order: c.settings.order, pageSize: c.settings.pageSize };
               update(c, { ...c.current, settings: c.settings });
               SP.toast(err.message);
             });
@@ -314,6 +325,17 @@
         range = { from: e.detail.from, to: e.detail.to };
         Object.values(cards).forEach(c => { $("a.see", c.el).href = insightLink(c.key, range); });
         Object.values(cards).forEach(c => fetchPage(c, 0));
+      });
+      // A new rows-per-page choice reloads the card from its first page and is saved with its settings
+      // (to the account with real data, for this page with sample data).
+      root.addEventListener("change", e => {
+        const size = e.target.closest("[data-zero-size]"), host = size?.closest("[data-zero-card],[data-hacos-card],[data-perf-card]");
+        const c = host && Object.values(cards).find(x => host.matches(x.sel));
+        if (!c) return;
+        c.settings = { ...c.settings, pageSize: Number(size.value) };
+        c.changes++;
+        if (SP.usesRealData()) saveSettings(c).catch(err => SP.toast(err.message));
+        fetchPage(c, 0);
       });
       // A dragged header redraws the card with its new column order, then saves it with the card's
       // settings (to the account with real data, for this page with sample data).

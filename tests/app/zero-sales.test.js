@@ -103,7 +103,7 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(saved).not.toBeNull());
     expect(saved).toEqual({
       name: "Wasted search terms", description: "Negate these.", showTracked: true, hideAsins: true, hideKeywords: true, sort: "clicks", dir: "asc",
-      filters: { clicks: { min: 5 }, orders: { max: 0 }, spend: { min: 10 } }, track: ["impressions", "clicks", "orders"], order: [],
+      filters: { clicks: { min: 5 }, orders: { max: 0 }, spend: { min: 10 } }, track: ["impressions", "clicks", "orders"], order: [], pageSize: 7,
     });
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Wasted search terms"));
     expect(document.querySelector(".modal-wrap")).toBeNull();
@@ -313,6 +313,39 @@ describe("Search Terms with 0 Sales card", () => {
     expect([saves[1].body.name, saves[1].body.description]).toEqual(["Second", "Two"]);
     saves[1].reply.resolve(json({ settings: saves[1].body }));
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] h3").textContent).toBe("Second"));
+  });
+
+  it("lets the rows per page be chosen, saves it, and says which rows are showing", async () => {
+    stubNavigation();
+    let saved = null;
+    const asked = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") { saved = JSON.parse(init.body); return json({ settings: saved }); }
+      const params = new URL(url, location.origin).searchParams, page = Number(params.get("page")), size = Number(params.get("pageSize") || 7);
+      asked.push([page, size]);
+      return json({ ...response(0), page, pageSize: size, rows: terms.slice(page * size, (page + 1) * size) });
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const pager = () => document.querySelector("[data-zero-card] [data-zero-pager]");
+    expect(pager().querySelector(".zero-showing").textContent).toBe("1–7 of 11");
+    // The shared-product badge's class would pull the count out of the pager.
+    expect(pager().querySelector(".zero-count")).toBeNull();
+    expect(pager().textContent).toContain("Page 1 of 2");
+    const size = pager().querySelector("[data-zero-size]");
+    expect([...size.options].map(o => o.value)).toEqual(["7", "10", "20", "30", "50"]);
+    expect(size.value).toBe("7");
+    size.value = "10";
+    size.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(pager().textContent).toContain("1–10 of 11"));
+    expect(document.querySelectorAll("[data-zero-card] tbody tr[data-k]")).toHaveLength(10);
+    expect(asked.at(-1)).toEqual([0, 10]);
+    await vi.waitFor(() => expect(saved?.pageSize).toBe(10));
+    expect(pager().querySelector("[data-zero-size]").value).toBe("10");
+    pager().querySelector("[data-zero-next]").click();
+    await vi.waitFor(() => expect(pager().querySelector(".zero-showing").textContent).toBe("11 of 11"));
+    expect(pager().textContent).toContain("Page 2 of 2");
+    expect(asked.at(-1)).toEqual([1, 10]);
   });
 
   it("refuses a min above its max and keeps the dialog open", async () => {

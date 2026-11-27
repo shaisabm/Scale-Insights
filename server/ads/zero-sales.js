@@ -1,10 +1,11 @@
 import { migrate } from "../db.js";
 import { addDays, isoDate, todayIn } from "../http.js";
-import { ZERO_DEFAULTS } from "./insight-settings.js";
+import { PAGE_SIZES, ZERO_DEFAULTS } from "./insight-settings.js";
 import { REPORTS } from "./sync.js";
 
 // The shared query for the search term insight cards: from/to dates (or days=7|14|30, ending
-// yesterday; the default is the last 30 days) and page. `today` is the profile's date.
+// yesterday; the default is the last 30 days), page, and optionally pageSize (one of PAGE_SIZES;
+// without it the card's saved rows per page apply). `today` is the profile's date.
 export function insightQuery(params, timeZone = process.env.AMAZON_ADS_TIME_ZONE || "America/Los_Angeles") {
   const today = todayIn(timeZone);
   const days = Number(params.get("days") || 30);
@@ -13,8 +14,9 @@ export function insightQuery(params, timeZone = process.env.AMAZON_ADS_TIME_ZONE
   const page = Number(params.get("page") || 0);
   // At most 400 dates, counting both ends.
   const badRange = !from || !to || from > to || to > today || to > addDays(from, 399);
-  if (badRange || !Number.isSafeInteger(page) || page < 0 || page > 10000) return null;
-  return { from, to, today, page };
+  const pageSize = params.has("pageSize") ? Number(params.get("pageSize")) : null;
+  if (badRange || !Number.isSafeInteger(page) || page < 0 || page > 10000 || (pageSize !== null && !PAGE_SIZES.includes(pageSize))) return null;
+  return { from, to, today, page, ...(pageSize ? { pageSize } : {}) };
 }
 
 const cents = value => Math.round(Number(value || 0) * 100) / 100;
@@ -41,7 +43,9 @@ export const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f
  * One search term per ad type and advertised product set for every insight card. Counts are aggregated over the chosen dates before the
  * card's filters, sort and pagination. `today` marks Amazon's available dates.
  */
-export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize = 7, settings = ZERO_DEFAULTS, includeDetails = false }) {
+export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize: asked, settings = ZERO_DEFAULTS, includeDetails = false }) {
+  // Rows per page: as asked, else the card's saved choice, else 7.
+  const pageSize = asked ?? settings.pageSize ?? 7;
   await migrate(db);
   // Prefer keyword detail on dates already backfilled. Older dates retain their complete ad-group
   // totals, explicitly marked as lacking keyword detail, until their reports are refreshed.

@@ -16,6 +16,14 @@ describe("cleanZeroSettings", () => {
     expect(settings).toMatchObject({ name: "Mine", track: ["impressions", "pl"], filters: { clicks: { min: 5 }, pl: { max: -10 } } });
   });
 
+  it("keeps the rows per page, 7 for settings saved before it could be chosen, and refuses other sizes", () => {
+    for (const size of [7, 10, 20, 30, 50]) expect(cleanZeroSettings(valid({ pageSize: size })).settings.pageSize).toBe(size);
+    const { pageSize, ...older } = valid();
+    expect(pageSize).toBe(7);
+    expect(cleanZeroSettings(older).settings.pageSize).toBe(7);
+    for (const size of [8, 0, "10", 100]) expect(cleanZeroSettings(valid({ pageSize: size })).error).toMatch(/rows per page/);
+  });
+
   it("keeps a dragged column order, and none for settings saved before columns could move", () => {
     expect(cleanZeroSettings(valid({ order: ["term", "p", "sp", "clicks", "impressions"] })).settings.order).toEqual(["term", "p", "sp", "clicks", "impressions"]);
     const { order, ...older } = valid();
