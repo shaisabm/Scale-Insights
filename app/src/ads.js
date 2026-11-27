@@ -4,7 +4,6 @@
   const SP = window.SP, { $, $$, svg, ICON: I, money, pct, int, ctl } = SP;
   const P = SP.PRODUCTS;
   const thumbCol = { key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p) };
-  const smallThumb = { key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p, "sm") };
   const neg = v => `<span class="neg">${money(v)}</span>`;
   const pl = v => (v < 0 ? neg(v) : money(v));
 
@@ -58,7 +57,12 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const card = (title, body, tip, id) => `<section class="icard" ${id === "st0" ? "data-zero-card" : id === "acos" ? "data-hacos-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button>${id === "st0" || id === "acos" ? "" : `<a href="${{ perf: "/Ads/Performance", kw0: "/Ads/DeadKeywords" }[id]}" class="see">See details ${svg(I.chevronR)}</a>`}</header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
+  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing" };
+  const insightLink = (id, range = {}) => {
+    const initial = SP.rangeFor("Last 30 Days");
+    return `/Ads/SearchTerms?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
+  };
+  const card = (title, body, tip, id, range) => `<section class="icard" ${id === "st0" ? "data-zero-card" : id === "acos" ? "data-hacos-card" : id === "perf" ? "data-perf-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${insightIds[id] ? insightLink(id, range) : "/Ads/DeadKeywords"}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
   // The card's metrics as [key, label, column heading, format], matching the API's. Break even bid
@@ -72,8 +76,12 @@
   const ZERO_DEFAULTS = { name: "Search Terms with 0 Sales", description: "[Tip]: You can automatically remove poor performing search terms using Automation.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "spend", dir: "desc", filters: { spend: { min: 10 }, orders: { max: 0 } }, track: ["impressions", "clicks", "pl"], order: [] };
   // The High ACOS card runs the same machinery with its own defaults: ACOS at 50% and up, worst first.
   const HIGH_ACOS_DEFAULTS = { name: "Search Terms with High ACOS", description: "[Tip]: Use [Automation] strategies to improve your advertising results.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "acos", dir: "desc", filters: { acos: { min: 50 } }, track: ["impressions", "clicks", "sales", "acos"], order: [] };
+  // The Performing Search Terms card runs the same machinery with its own defaults: conversion at
+  // 15% and up, best converting first.
+  const PERFORMING_DEFAULTS = { name: "Performing Search Terms", description: "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", showTracked: true, hideAsins: true, hideKeywords: false, sort: "conversion", dir: "desc", filters: { conversion: { min: 15 } }, track: ["impressions", "clicks", "orders", "sales", "conversion"], order: [] };
   const zeroDefaults = () => JSON.parse(JSON.stringify(ZERO_DEFAULTS));
   const acosDefaults = () => JSON.parse(JSON.stringify(HIGH_ACOS_DEFAULTS));
+  const performingDefaults = () => JSON.parse(JSON.stringify(PERFORMING_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
   const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
@@ -86,6 +94,18 @@
     ["jump rope for kids", 3400, 30, 8.2, 25.0, 3], ["leather jump rope", 1100, 14, 5.5, 22.0, 2],
   ];
   const acosRow = ([term, impressions, clicks, spend, sales, orders], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100, conversion: (orders / clicks) * 100, acos: (spend / sales) * 100, roas: sales / spend, pl: sales - spend, breakEvenBid: null });
+  // Performing Search Terms sample rows as [term, impressions, clicks, spend, sales, orders]; the
+  // last two sit below the card's default 15% conversion filter, and one is an ASIN.
+  /** @type {[string, number, number, number, number, number][]} */
+  const PERFORMING_TERMS = [
+    ["training rope with handles", 2600, 44, 31.87, 60.1, 9], ["speed jump rope", 2100, 36, 24.5, 48.3, 7],
+    ["weighted jump rope", 4200, 55, 52.31, 71.8, 10], ["jump rope for men", 3100, 38, 30.12, 54.6, 8],
+    ["B0JUMP99XY", 1500, 22, 21.4, 25.99, 4], ["adjustable jump rope", 5300, 61, 41.2, 95.4, 14],
+    ["fitness rope", 1200, 15, 12.75, 28.2, 5], ["boxing jump rope", 900, 12, 10.8, 19.98, 4],
+    ["jump rope workout", 2000, 25, 19.5, 46.4, 8], ["rope skipping", 800, 10, 7.9, 16.5, 3],
+    ["jump rope for kids", 3400, 30, 8.2, 50.0, 11], ["leather jump rope", 1100, 14, 5.5, 44.0, 8],
+    ["digital counting jump rope", 1700, 28, 22.1, 18.2, 2], ["jump rope", 6000, 90, 60.4, 58.5, 9],
+  ];
   function sampleInsight(rows, settings, page) {
     const all = rows
       .filter(r => Object.entries(settings.filters).every(([k, f]) => r[k] != null && (f.min == null || r[k] >= f.min) && (f.max == null || r[k] <= f.max))
@@ -104,6 +124,7 @@
   }
   const sampleZero = (settings = zeroDefaults(), page = 0) => sampleInsight(TERMS.map(zeroRow), settings, page);
   const sampleAcos = (settings = acosDefaults(), page = 0) => sampleInsight(ACOS_TERMS.map(acosRow), settings, page);
+  const samplePerf = (settings = performingDefaults(), page = 0) => sampleInsight(PERFORMING_TERMS.map(acosRow), settings, page);
   const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
   // A row naming several products (an ad group advertising them all) shows the first one's photo with
@@ -146,14 +167,16 @@
   const BLANK_ZERO = new Set(["orders", "units", "sales", "conversion", "acos", "roas"]);
   // Columns follow the order their headers were dragged into (settings.order); any it doesn't
   // list, such as a metric tracked later, keep their usual order after the ones it does.
-  const zeroCols = s => {
-    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` },
+  const zeroCols = (s, showIds = false) => {
+    const idCell = v => `<span class="clamp2">${SP.esc(v ?? "")}</span>`;
+    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: idCell },
+      ...(showIds ? [{ key: "campaignId", label: "Campaign ID", w: 130, fmt: idCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: idCell }] : []),
       ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
     const order = s.order || [], rank = c => (order.includes(c.key) ? order.indexOf(c.key) : order.length);
     return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
   };
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
-  const zeroBody = (data, s, id) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
+  const zeroBody = (data, s, id, showIds = false) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s, showIds), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   const zeroEdit = s => {
     const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
     const rows = ZERO_METRICS.map(([k, label]) => {
@@ -180,33 +203,35 @@
   SP.pages["/Ads"] = {
     title: "Insights overview",
     load: () => {
-      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos() });
+      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf() });
       const r = SP.rangeFor("Last 30 Days"), q = new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" });
-      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`)]).then(([st0, acos]) => ({ st0, acos }));
+      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`)]).then(([st0, acos, perf]) => ({ st0, acos, perf }));
     },
     render(data) {
-      const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults();
+      const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults();
       const c1 = zeroBody(data.st0, zs, "i1");
       const c2 = zeroBody(data.acos, as, "i2");
-      const c3 = SP.grid({ id: "i3", search: false, emptyFoot: false, cls: "fit", empty: "No results found", cols: [smallThumb, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term" }, { key: "orders", label: "Orders", align: "r" }, { key: "spend", label: "Spend", align: "r" }, { key: "cpc", label: "CPC", align: "r" }, { key: "conv", label: "Conversion", align: "r" }, { key: "acos", label: "ACOS", align: "r" }, { key: "pl", label: "P&amp;L", align: "r" }], rows: [] });
+      const c3 = zeroBody(data.perf, ps, "i3");
       const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
         rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
         sum: rs => ({ clicks: rs.reduce((a, r) => a + r.clicks, 0), cpc: rs.reduce((a, r) => a + r.cpc, 0) / rs.length, pl: rs.reduce((a, r) => a + r.pl, 0) }) });
       const waitingCard = title => `<section class="icard"><header><h3>${title}</h3></header><div class="icard-body"><p>Live data for this insight is not connected yet.</p></div></section>`;
       const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
-        ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0")}
-        ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos")}
-        ${SP.usesRealData() ? ["Performing Search Terms", "Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Performing Search Terms", c3, "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.", "perf")}${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
+        ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0", data.st0)}
+        ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos", data.acos)}
+        ${card(SP.esc(ps.name), c3, SP.esc(ps.description), "perf", data.perf)}
+        ${SP.usesRealData() ? ["Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
     wire(root, data) {
       const initial = SP.rangeFor("Last 30 Days");
       let range = { from: data.st0.from || SP.iso(initial.from), to: data.st0.to || SP.iso(initial.to) };
-      // The two search term cards run the same machinery against their own endpoint and settings.
+      // The three search term cards run the same machinery against their own endpoint and settings.
       const cards = {
         st0: { key: "st0", sel: "[data-zero-card]", grid: "i1", api: "/api/ads/zero-sales", saveApi: "/api/ads/zero-sales-settings", defaults: zeroDefaults, sample: sampleZero },
         acos: { key: "acos", sel: "[data-hacos-card]", grid: "i2", api: "/api/ads/high-acos", saveApi: "/api/ads/high-acos-settings", defaults: acosDefaults, sample: sampleAcos },
+        perf: { key: "perf", sel: "[data-perf-card]", grid: "i3", api: "/api/ads/performing", saveApi: "/api/ads/performing-settings", defaults: performingDefaults, sample: samplePerf },
       };
       for (const c of Object.values(cards)) {
         c.el = $(c.sel, root);
@@ -220,6 +245,7 @@
       const update = (c, next) => {
         c.current = next;
         if (next.settings) c.settings = next.settings;
+        $("a.see", c.el).href = insightLink(c.key, range);
         $("h3", c.el).textContent = c.settings.name;
         $("footer", c.el).textContent = c.settings.description;
         $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid);
@@ -275,7 +301,7 @@
           $("[data-z=sort]", dialog).value = `${c.settings.sort}:${c.settings.dir}`;
         } else if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
         // The pager and sync button act on the card they sit in.
-        const host = e.target.closest("[data-zero-card],[data-hacos-card]");
+        const host = e.target.closest("[data-zero-card],[data-hacos-card],[data-perf-card]");
         const c = host && Object.values(cards).find(x => host.matches(x.sel));
         if (c) {
           if (e.target.closest("[data-zero-next]")) fetchPage(c, c.current.page + 1);
@@ -286,6 +312,7 @@
       });
       root.addEventListener("rangechange", e => {
         range = { from: e.detail.from, to: e.detail.to };
+        Object.values(cards).forEach(c => { $("a.see", c.el).href = insightLink(c.key, range); });
         Object.values(cards).forEach(c => fetchPage(c, 0));
       });
       // A dragged header redraws the card with its new column order, then saves it with the card's
@@ -358,27 +385,127 @@
   };
 
   // ---------- Search terms ----------
+  const searchFilters = { "": "No filter", "zero-sales": "Search Terms with 0 Sales", "high-acos": "Search Terms with High ACOS", performing: "Performing Search Terms" };
+  const searchDefaults = id => ({ "zero-sales": zeroDefaults, "high-acos": acosDefaults, performing: performingDefaults }[id]?.() || { name: "All search terms", filters: {}, hideAsins: false, hideKeywords: false, sort: "clicks", dir: "desc" });
+  const searchSum = rows => {
+    const sum = { impressions: 0, clicks: 0, orders: 0, units: 0, spend: 0, sales: 0 };
+    for (const r of rows) for (const k of Object.keys(sum)) sum[k] += Number(r[k] || 0);
+    const ratio = (a, b, scale = 1) => b ? a / b * scale : null;
+    return { ...sum, ctr: ratio(sum.clicks, sum.impressions, 100), cpc: ratio(sum.spend, sum.clicks), costPerOrder: ratio(sum.spend, sum.orders),
+      conversion: ratio(sum.orders, sum.clicks, 100), acos: ratio(sum.spend, sum.sales, 100), roas: ratio(sum.sales, sum.spend) };
+  };
+  const searchMetricCols = keys => keys.map(key => {
+    const [, , label, format] = ZERO_METRICS.find(([k]) => k === key) || [key, "", "Cost / order", money];
+    return { key, label, align: "r", fmt: v => v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : format(v) };
+  });
+  const searchText = v => SP.esc(v || "—");
+  const keywordState = (value, row) => {
+    const state = ["enabled", "paused", "archived"].includes(value) ? value : "unknown";
+    const label = { enabled: "Enabled", paused: "Paused", archived: "Archived", unknown: "State unavailable" }[state];
+    const title = `${label} (current keyword state)${row.stateUpdatedAt ? ` · Updated ${row.stateUpdatedAt}` : ""}`;
+    return `<span class="keyword-state ${state}" role="img" aria-label="${label}" title="${SP.esc(title)}"></span>`;
+  };
+  const searchProductLabel = (v, r) => (r.products || []).map(p => `<span class="clamp2">${SP.esc(p.title || p.asin)}</span><small class="sub">${SP.esc(p.asin)}</small>`).join('<span class="sub">+</span>');
+  const detailGrid = (r, id) => `<div class="detpanel search-detail">${r.details.some(d => !d.detailed) ? '<p class="muted">Keyword and match details for some dates are awaiting a report refresh. Their ad-group totals are included below.</p>' : ""}${SP.grid({ id, columns: true, pageSize: 20, cols: [
+    { key: "campaignName", label: "Campaign", w: 190, fmt: (v, d) => searchText(v || d.campaignId) },
+    { key: "adGroupName", label: "Ad group", w: 140, fmt: (v, d) => searchText(v || d.adGroupId) },
+    { key: "keyword", label: "Keyword / target", w: 160, fmt: searchText },
+    { key: "state", label: "State", fmt: keywordState },
+    { key: "matchType", label: "Match", fmt: v => searchText(v?.toLowerCase()) },
+    ...searchMetricCols(["impressions", "clicks", "orders", "units", "sales", "conversion", "spend", "cpc", "acos", "roas"]),
+    { key: "lastSeen", label: "Last activity", fmt: searchText },
+  ], rows: r.details, sum: searchSum })}</div>`;
+  const searchTermGrid = (rows, id, withProduct = false, settings = {}) => SP.grid({ id, columns: true, pageSize: 20,
+    sortKey: settings.sort || "clicks", dir: settings.dir === "asc" ? 1 : -1,
+    details: r => detailGrid(r, `${id}-detail-${r._k}`),
+    cols: [...(withProduct ? [{ key: "asin", label: "Products", w: 200, fmt: searchProductLabel }] : []),
+      { key: "sponsored", label: "Sponsored" }, { key: "term", label: "Search term", w: 180, fmt: searchText },
+      ...searchMetricCols(["impressions", "clicks", "orders", "units", "spend", "sales", "ctr", "cpc", "costPerOrder", "conversion", "acos", "roas", "pl", "breakEvenBid"])],
+    rows: rows.map((r, i) => ({ ...r, _k: String(i) })), sum: searchSum });
+  const searchPanels = (data, selected = "", tab = 0) => {
+    const products = data.products.filter(p => !selected || p.asin === selected), terms = data.rows.filter(r => !selected || r.asin === selected);
+    return `${SP.tabs("search-report", ["Products", "Search terms"], tab)}${SP.panels("search-report", [
+      SP.grid({ id: "search-products", columns: true, cols: [
+        { key: "p", label: "Product", muted: true, fmt: (v, r) => `<span class="search-photos">${r.products.map(p => zeroPhoto(p, "zero-thumb")).join("")}</span>` }, { key: "asin", label: "ASIN", w: 240, fmt: searchProductLabel },
+        ...searchMetricCols(["impressions", "clicks", "orders", "sales", "conversion", "spend", "cpc", "ctr", "acos", "roas"])],
+      rows: products.map((p, i) => ({ ...p, _k: String(i) })), sum: searchSum,
+      details: p => `<div class="detpanel">${searchTermGrid(p.terms, `search-product-${p._k}`, false, data.settings)}</div>` }),
+      searchTermGrid(terms, "search-flat", true, data.settings),
+    ], tab)}`;
+  };
+  const searchQuery = () => {
+    const params = new URLSearchParams(location.search), range = SP.rangeFor("Last 30 Days");
+    return { from: params.get("from") || SP.iso(range.from), to: params.get("to") || SP.iso(range.to), filterId: params.get("filterId") || "" };
+  };
+  // Sample mode has the same hierarchy, including one group advertising both sample products.
+  const sampleSearch = query => {
+    const settings = searchDefaults(query.filterId), source = [...TERMS.map(zeroRow), ...ACOS_TERMS.map(acosRow), ...PERFORMING_TERMS.map(acosRow)];
+    const products = P.slice(0, 2).map(p => ({ asin: p.asin, title: p.title, image: null }));
+    const rows = source.map((r, i) => {
+      const items = i % 3 === 2 ? products : [products[i % 2]], sum = searchSum([r]);
+      return { ...r, ...sum, asin: items.map(p => p.asin).sort().join(","), title: items[0].title, image: null, products: items,
+        details: [{ ...sum, campaignId: `campaign-${i}`, campaignName: `SP | ${r.term}`, adGroupId: `group-${i}`, adGroupName: "Broad", keyword: r.term, state: i % 4 === 0 ? "paused" : "enabled", matchType: "BROAD", lastSeen: query.to, detailed: true }] };
+    });
+    const groups = new Map();
+    for (const r of rows) {
+      const key = JSON.stringify([r.asin, r.sponsored, r.term]), prev = groups.get(key);
+      if (prev) { Object.assign(prev, searchSum([prev, r])); prev.details.push(...r.details); }
+      else groups.set(key, { ...r, details: [...r.details] });
+    }
+    const all = [...groups.values()];
+    const matched = all.filter(r => Object.entries(settings.filters).every(([k, f]) => r[k] != null && (f.min == null || r[k] >= f.min) && (f.max == null || r[k] <= f.max))
+      && !(settings.hideAsins && asinTerm.test(r.term)) && !(settings.hideKeywords && !asinTerm.test(r.term)));
+    const sets = [...new Set(matched.map(r => r.asin))].map(asin => {
+      const same = all.filter(r => r.asin === asin), first = same[0];
+      return { asin, title: first.title, image: null, products: first.products, ...searchSum(same), terms: matched.filter(r => r.asin === asin) };
+    });
+    return { ...query, settings, products: sets, rows: matched, totals: searchSum(matched), coverage: {}, detailComplete: true };
+  };
+  const loadSearch = query => SP.usesRealData() ? SP.api.get(`/api/ads/search-terms?${new URLSearchParams(query)}`) : Promise.resolve(sampleSearch(query));
   SP.pages["/Ads/SearchTerms"] = {
     title: "Search terms",
-    render() {
-      const rows = [[1, 52489, 1186, 31, 651.69, 1092.7], [0, 15376, 645, 31, 684.69, 644.6]].map(([i, imp, clicks, orders, sales, spend]) => ({ _k: P[i].asin, p: P[i], tracked: "", imp, clicks, orders, sales, conv: (orders / clicks) * 100, spend }));
-      const terms = TERMS.map(([t, imp, clicks, v], i) => ({ term: t, p: P[i % 2], imp, clicks, orders: i === 1 ? 2 : 0, spend: -v + clicks * 0.1, rank: i < 3 ? `#${i * 7 + 3}` : "" }));
-      const tracker = `<span class="tracker"><span>${svg(I.keyword)}<b>Rank tracker</b></span><span>Tracking keywords: <b data-tc>0/30</b></span><span>Available: <b data-ta>30</b></span></span>`;
-      return `${learnFilters({ caret: true, html: tracker })}
-        ${SP.panel(`<div class="frow">${ctl.range("", 90, "Last 90 Days")}${ctl.products()}${ctl.select("Select filter", ["No filter", "Zero sales", "High ACOS"])}</div><div class="frow">${ctl.apply("Update")}</div>`)}
-        ${SP.tabs("stt", ["Products", "Search terms"])}
-        ${SP.panels("stt", [
-          SP.grid({ id: "stp", columns: true, details: () => `<div class="detpanel">${TERMS.slice(0, 4).map(t => `<span class="chip-s">${t[0]}</span>`).join("")}</div>`, cols: [{ key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p) }, { key: "asin", label: "ASIN", fmt: (v, r) => `<span class="ellip w150">${SP.esc(r.p.title)}</span><small class="sub">${r.p.asin}, ${r.p.sku}</small>` }, { key: "tracked", label: "Tracked<br>keywords", align: "r" }, { key: "imp", label: "Impressions", align: "r", filter: true, fmt: int }, { key: "clicks", label: "Clicks", align: "r", filter: true, fmt: int }, { key: "orders", label: "Orders", align: "r", filter: true }, { key: "sales", label: "Sales", align: "r", filter: true, fmt: money }, { key: "conv", label: "Conversion", align: "r", filter: true, fmt: v => pct(v) }, { key: "spend", label: "Spend", align: "r", filter: true, fmt: money }], rows, sum: rs => ({ imp: rs.reduce((a, r) => a + r.imp, 0), clicks: rs.reduce((a, r) => a + r.clicks, 0), orders: rs.reduce((a, r) => a + r.orders, 0), sales: rs.reduce((a, r) => a + r.sales, 0), conv: 3.39, spend: rs.reduce((a, r) => a + r.spend, 0) }) }),
-          SP.grid({ id: "stt", columns: true, cols: [{ key: "term", label: "Search term", filter: true }, { key: "p", label: "Product", muted: true, fmt: p => SP.thumb(p, "sm") }, { key: "imp", label: "Impressions", align: "r", fmt: int }, { key: "clicks", label: "Clicks", align: "r" }, { key: "orders", label: "Orders", align: "r" }, { key: "spend", label: "Spend", align: "r", fmt: money }, { key: "rank", label: "Rank", align: "r" }, { key: "term", label: "Track", muted: true, fmt: t => `<button class="link-btn" data-track="${SP.esc(t)}">Track</button>` }], rows: terms }),
-        ])}
-        ${SP.meta("Updated just now")}`;
+    load: () => loadSearch(searchQuery()),
+    render(data) {
+      return `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}<label class="field"><span>Filter</span><select data-search-filter>${Object.entries(searchFilters).map(([id, label]) => `<option value="${id}" ${data.filterId === id ? "selected" : ""}>${label}</option>`).join("")}</select></label><label class="field"><span>Products</span><select data-search-product><option value="">All product groups</option>${data.products.map(p => `<option value="${SP.esc(p.asin)}">${SP.esc(p.asin.replaceAll(",", " + "))}</option>`).join("")}</select></label>${ctl.apply("Update")}</div>`)}
+        <p class="muted">Search terms combine campaigns and ad groups with the same advertised products and sponsored ad type. Expand a search term to see its campaign, ad group, keyword and match type.</p>
+        <div data-search-status>${zeroStatus(data)}${data.detailComplete === false ? '<p class="muted">Some keyword details are awaiting sync. Existing ad-group totals remain available.</p>' : ""}</div>
+        <p data-search-error role="alert" hidden></p><div data-search-results>${searchPanels(data)}</div>`;
     },
-    wire(root) {
-      let n = 0;
+    wire(root, initial) {
+      let query = { from: initial.from, to: initial.to, filterId: initial.filterId || "" }, current = initial, latest = 0, selected = "", tab = 0;
+      const range = $("[data-range]", root), error = $("[data-search-error]", root);
+      const setRange = () => { Object.assign(range.dataset, { from: query.from, to: query.to, preset: "Custom Range" }); $(".rlabel", range).textContent = `${day(query.from)} – ${day(query.to)}`; };
+      setRange();
+      $("[data-search-filter]", root).value = query.filterId;
+      $("[data-search-product]", root).value = selected;
+      const update = async () => {
+        const request = ++latest;
+        query = { ...query, filterId: $("[data-search-filter]", root).value };
+        error.hidden = true;
+        root.setAttribute("aria-busy", "true");
+        try {
+          const next = await loadSearch(query);
+          if (request !== latest) return;
+          current = next;
+          const productSelect = $("[data-search-product]", root);
+          if (!next.products.some(p => p.asin === selected)) selected = "";
+          productSelect.innerHTML = `<option value="">All product groups</option>${next.products.map(p => `<option value="${SP.esc(p.asin)}">${SP.esc(p.asin.replaceAll(",", " + "))}</option>`).join("")}`;
+          productSelect.value = selected;
+          $("[data-search-results]", root).innerHTML = searchPanels(next, selected, tab);
+          $("[data-search-status]", root).innerHTML = zeroStatus(next) + (next.detailComplete === false ? '<p class="muted">Some keyword details are awaiting sync. Existing ad-group totals remain available.</p>' : "");
+          history.replaceState(null, "", `/Ads/SearchTerms?${new URLSearchParams(query)}`);
+        } catch (err) { if (request === latest) { error.textContent = err.message; error.hidden = false; } }
+        finally { if (request === latest) root.removeAttribute("aria-busy"); }
+      };
+      root.addEventListener("rangechange", e => { query = { ...query, from: e.detail.from, to: e.detail.to }; update(); });
+      root.addEventListener("tab", e => { if (e.detail.id === "search-report") tab = e.detail.i; });
+      root.addEventListener("change", e => {
+        if (e.target.matches("[data-search-filter]")) update();
+        if (e.target.matches("[data-search-product]")) { selected = e.target.value; $("[data-search-results]", root).innerHTML = searchPanels(current, selected, tab); }
+      });
       root.addEventListener("click", e => {
-        const t = e.target.closest("[data-track]");
-        if (t && !t.disabled) { n++; t.textContent = "Tracking"; t.disabled = true; $("[data-tc]", root).textContent = `${n}/30`; $("[data-ta]", root).textContent = 30 - n; }
-        if (e.target.closest("[data-apply]")) SP.toast("Search terms updated.");
+        if (e.target.closest("[data-apply]")) update();
+        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(update).catch(err => { error.textContent = err.message; error.hidden = false; });
       });
     },
   };

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
 import { refreshProducts } from "./products.js";
+import { refreshKeywordStates } from "./keyword-states.js";
 
 // Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands and Sponsored
 // Display per campaign (14-day). These match the Amazon Ads console's columns for each ad type.
@@ -36,7 +37,7 @@ export const REPORTS = {
     adProduct: "SPONSORED_PRODUCTS",
     reportTypeId: "spSearchTerm",
     groupBy: ["searchTerm"],
-    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases7d", "unitsSoldClicks7d", "sales7d"],
+    columns: ["date", "campaignId", "adGroupId", "campaignName", "adGroupName", "keywordId", "keyword", "matchType", "searchTerm", "impressions", "clicks", "cost", "purchases7d", "unitsSoldClicks7d", "sales7d"],
     row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases7d, units: r.unitsSoldClicks7d, sales: r.sales7d }),
   },
   SB_SEARCH: {
@@ -44,7 +45,7 @@ export const REPORTS = {
     adProduct: "SPONSORED_BRANDS",
     reportTypeId: "sbSearchTerm",
     groupBy: ["searchTerm"],
-    columns: ["date", "campaignId", "adGroupId", "searchTerm", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
+    columns: ["date", "campaignId", "adGroupId", "campaignName", "adGroupName", "keywordId", "keywordText", "matchType", "searchTerm", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
     row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
   },
 };
@@ -220,6 +221,21 @@ export function planWindows({ lastDate, synced, now, historyDays, freshDays = FR
 
 const num = v => Number(v) || 0;
 
+/** Preserve each keyword/match contribution before summing the summary report. */
+export function normalizeSearchDetails(product, rows) {
+  const grouped = new Map();
+  for (const raw of rows || []) {
+    const [counts] = normalizeRows(product, [raw]);
+    const row = { ...counts, campaignName: String(raw.campaignName || ""), adGroupName: String(raw.adGroupName || ""),
+      keywordId: String(raw.keywordId ?? ""), keyword: String(raw.keyword || raw.keywordText || raw.targeting || ""), matchType: String(raw.matchType || "") };
+    const key = JSON.stringify([row.date, row.campaignId, row.adGroupId, row.term, row.keywordId, row.keyword, row.matchType]);
+    const prev = grouped.get(key);
+    if (prev) for (const k of ["impressions", "clicks", "cost", "orders", "units", "sales"]) prev[k] += row[k];
+    else grouped.set(key, row);
+  }
+  return [...grouped.values()];
+}
+
 /** Report rows -> one row per date/campaign/ad group/ASIN with summed metrics. */
 export function normalizeRows(product, rows) {
   const pick = REPORTS[product].row;
@@ -258,7 +274,7 @@ async function requestReport(ads, profileId, product, w) {
 }
 
 /** Replaces one window's rows and marks its days as stored, in one transaction. */
-export async function storeWindow(db, { profileId, product, start, end, rows, syncedAt }) {
+export async function storeWindow(db, { profileId, product, start, end, rows, syncedAt, detailRows }) {
   const search = SEARCH_PRODUCTS.includes(product);
   const table = search ? "ads_search_terms_daily" : "ads_daily";
   const stmts = [{ sql: `DELETE FROM ${table} WHERE profile_id = ? AND ad_product = ? AND date BETWEEN ? AND ?`, args: [profileId, product, start, end] }];
@@ -272,7 +288,19 @@ export async function storeWindow(db, { profileId, product, start, end, rows, sy
       args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.asin, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales],
     });
   }
+  if (search) {
+    stmts.push({ sql: "DELETE FROM ads_search_term_details_daily WHERE profile_id = ? AND ad_product = ? AND date BETWEEN ? AND ?", args: [profileId, product, start, end] });
+    stmts.push({ sql: "DELETE FROM ads_search_detail_days WHERE profile_id = ? AND ad_product = ? AND date BETWEEN ? AND ?", args: [profileId, product, start, end] });
+    for (const r of detailRows || []) {
+      if (r.date < start || r.date > end) continue;
+      stmts.push({ sql: `INSERT INTO ads_search_term_details_daily
+        (profile_id, ad_product, date, campaign_id, ad_group_id, search_term, keyword_id, keyword, match_type, campaign_name, ad_group_name, impressions, clicks, cost, orders, units, sales)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.term, r.keywordId, r.keyword, r.matchType, r.campaignName, r.adGroupName, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales] });
+    }
+  }
   for (let d = start; d <= end; d = addDays(d, 1)) {
+    if (search && detailRows) stmts.push({ sql: "INSERT OR REPLACE INTO ads_search_detail_days VALUES (?, ?, ?, ?)", args: [profileId, product, d, syncedAt] });
     stmts.push({ sql: "INSERT OR REPLACE INTO ads_synced_days (profile_id, ad_product, date, synced_at) VALUES (?, ?, ?, ?)", args: [profileId, product, d, syncedAt] });
   }
   await db.batch(stmts, "write");
@@ -299,8 +327,10 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
       try {
         const report = await ads.getReport(profileId, req.report_id);
         if (report.status === "COMPLETED" && report.url) {
-          const rows = normalizeRows(req.ad_product, await ads.downloadReport(report.url));
-          await storeWindow(db, { profileId, product: req.ad_product, start: req.start_date, end: req.end_date, rows, syncedAt: iso() });
+          const rawRows = await ads.downloadReport(report.url);
+          const rows = normalizeRows(req.ad_product, rawRows);
+          const detailRows = req.search_details ? normalizeSearchDetails(req.ad_product, rawRows) : undefined;
+          await storeWindow(db, { profileId, product: req.ad_product, start: req.start_date, end: req.end_date, rows, syncedAt: iso(), detailRows });
           await setStatus(req.report_id, "STORED");
           summary.stored++;
           summary.rows += rows.length;
@@ -324,11 +354,16 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   }
 
   await collect();
+  if (products.some(p => SEARCH_PRODUCTS.includes(p)) && typeof ads.request === "function") {
+    summary.errors.push(...await refreshKeywordStates(db, ads, profileId, { now }));
+  }
 
   const lastDate = addDays(todayIn(timeZone, now()), -1);
   const pending = await pendingRequests();
   for (const product of products) {
-    const stored = await db.execute({ sql: "SELECT date, synced_at FROM ads_synced_days WHERE profile_id = ? AND ad_product = ?", args: [profileId, product] });
+    const stored = await db.execute({ sql: SEARCH_PRODUCTS.includes(product)
+      ? `SELECT s.date, s.synced_at FROM ads_synced_days s JOIN ads_search_detail_days d ON d.profile_id = s.profile_id AND d.ad_product = s.ad_product AND d.date = s.date AND d.synced_at = s.synced_at WHERE s.profile_id = ? AND s.ad_product = ?`
+      : "SELECT date, synced_at FROM ads_synced_days WHERE profile_id = ? AND ad_product = ?", args: [profileId, product] });
     const synced = new Map(stored.rows.map(r => [r.date, r.synced_at]));
     try {
       let accepted = false;
@@ -341,8 +376,8 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
           await db.execute({ sql: "DELETE FROM ads_unsupported WHERE profile_id = ? AND ad_product = ?", args: [profileId, product] });
         }
         await db.execute({
-          sql: "INSERT OR REPLACE INTO ads_report_requests (report_id, profile_id, ad_product, start_date, end_date, status, requested_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)",
-          args: [req.reportId, profileId, product, req.start, req.end, iso(), iso()],
+          sql: "INSERT OR REPLACE INTO ads_report_requests (report_id, profile_id, ad_product, start_date, end_date, status, requested_at, updated_at, search_details) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)",
+          args: [req.reportId, profileId, product, req.start, req.end, iso(), iso(), SEARCH_PRODUCTS.includes(product) ? 1 : 0],
         });
         summary.requested++;
       }

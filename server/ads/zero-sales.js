@@ -22,11 +22,11 @@ const asinPattern = /^B0[A-Z0-9]{8}$/i;
 const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
 
 /** Every metric the card can filter, sort or show, from summed counts. Null means unknown. */
-function metrics(r) {
+export function metrics(r) {
   const ratio = (a, b, k = 1) => (b ? (a / b) * k : null);
   return {
     impressions: r.impressions, clicks: r.clicks, orders: r.orders, units: r.units, spend: cents(r.cost), sales: cents(r.sales),
-    cpc: ratio(r.cost, r.clicks), ctr: ratio(r.clicks, r.impressions, 100), conversion: ratio(r.orders, r.clicks, 100),
+    costPerOrder: ratio(r.cost, r.orders), cpc: ratio(r.cost, r.clicks), ctr: ratio(r.clicks, r.impressions, 100), conversion: ratio(r.orders, r.clicks, 100),
     acos: ratio(r.cost, r.sales, 100), roas: ratio(r.sales, r.cost),
     // Without product costs, P&L is only known when nothing sold: the spend, lost. Sponsored Brands
     // spend isn't tied to one product's profit, so it stays blank, as in the source report.
@@ -35,26 +35,43 @@ function metrics(r) {
   };
 }
 
-const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f.min) && (f.max == null || v - 0.000001 <= f.max);
+export const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f.min) && (f.max == null || v - 0.000001 <= f.max);
 
 /**
- * One search term per ad type/product, aggregated across the chosen dates, filtered, sorted and
- * paged by the card's `settings`. `today` (the profile's date) marks which of those dates Amazon
- * can provide: from `historyDays` back, through yesterday.
+ * One search term per ad type and advertised product set for every insight card. Counts are aggregated over the chosen dates before the
+ * card's filters, sort and pagination. `today` marks Amazon's available dates.
  */
-export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize = 7, settings = ZERO_DEFAULTS }) {
+export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize = 7, settings = ZERO_DEFAULTS, includeDetails = false }) {
   await migrate(db);
+  // Prefer keyword detail on dates already backfilled. Older dates retain their complete ad-group
+  // totals, explicitly marked as lacking keyword detail, until their reports are refreshed.
+  const source = includeDetails ? `(
+    SELECT profile_id, ad_product, date, campaign_id, ad_group_id, search_term,
+      impressions, clicks, cost, orders, units, sales, keyword_id, keyword, match_type, campaign_name, ad_group_name, 1 AS detailed
+    FROM ads_search_term_details_daily t WHERE EXISTS (
+      SELECT 1 FROM ads_search_detail_days d JOIN ads_synced_days s
+      ON s.profile_id = d.profile_id AND s.ad_product = d.ad_product AND s.date = d.date AND s.synced_at = d.synced_at
+      WHERE d.profile_id = t.profile_id AND d.ad_product = t.ad_product AND d.date = t.date)
+    UNION ALL
+    SELECT s.profile_id, s.ad_product, s.date, s.campaign_id, s.ad_group_id, s.search_term,
+      s.impressions, s.clicks, s.cost, s.orders, s.units, s.sales, '', '', '', '', '', 0
+    FROM ads_search_terms_daily s WHERE NOT EXISTS (
+      SELECT 1 FROM ads_search_detail_days d JOIN ads_synced_days synced
+      ON synced.profile_id = d.profile_id AND synced.ad_product = d.ad_product AND synced.date = d.date AND synced.synced_at = d.synced_at
+      WHERE d.profile_id = s.profile_id AND d.ad_product = s.ad_product AND d.date = s.date)
+  )` : "ads_search_terms_daily";
   const results = await db.batch([
     {
       // Sponsored Brands days take the ASINs their ad group is known to have advertised that day.
       sql: `SELECT t.ad_product, t.campaign_id, t.ad_group_id, t.search_term, h.asins,
+                   ${includeDetails ? "t.keyword_id, t.keyword, t.match_type, t.detailed, MAX(t.campaign_name) AS campaign_name, MAX(t.ad_group_name) AS ad_group_name, MAX(t.date) AS last_seen," : ""}
                    SUM(t.impressions) AS impressions, SUM(t.clicks) AS clicks,
                    SUM(t.cost) AS cost, SUM(t.orders) AS orders, SUM(t.units) AS units, SUM(t.sales) AS sales
-            FROM ads_search_terms_daily t
+            FROM ${source} t
             LEFT JOIN ads_search_product_history h ON h.profile_id = t.profile_id AND h.ad_product = t.ad_product
               AND h.campaign_id = t.campaign_id AND h.ad_group_id = t.ad_group_id AND t.date BETWEEN h.valid_from AND h.valid_to
             WHERE t.profile_id = ? AND t.date BETWEEN ? AND ?
-            GROUP BY t.ad_product, t.campaign_id, t.ad_group_id, t.search_term, h.asins`,
+            GROUP BY t.ad_product, t.campaign_id, t.ad_group_id, t.search_term, h.asins ${includeDetails ? ", t.keyword_id, t.keyword, t.match_type, t.detailed" : ""}`,
       args: [profileId, from, to],
     },
     {
@@ -76,20 +93,24 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     // ads they reported in these dates, Sponsored Brands ones through what they advertised each day.
     // An ad group advertising several products gives one row naming all of them, since the report
     // can't say which of them a search was for. Rows whose products aren't known are left out of
-    // this product-level insight and their spend is reported instead.
+    // this insight and their spend is reported instead.
     const sb = r.ad_product === "SB_SEARCH";
     // Sorted, comma-separated ASINs.
-    const asin = sb ? (r.asins ? String(r.asins) : null) : spAsins.get(`${r.campaign_id}|${r.ad_group_id}`);
+    const asin = sb ? (r.asins ? [...new Set(String(r.asins).split(","))].sort().join(",") : null) : spAsins.get(`${r.campaign_id}|${r.ad_group_id}`);
     if (!asin) {
       unattributed[r.ad_product] += Number(r.cost);
       continue;
     }
-    const key = `${r.ad_product}|${asin}|${r.search_term}`;
-    const row = grouped.get(key) || { adProduct: r.ad_product, asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
+    const key = JSON.stringify([r.ad_product, asin, r.search_term]);
+    const row = grouped.get(key) || { adProduct: r.ad_product, ...(includeDetails ? { details: [] } : {}), asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
     for (const k of ["impressions", "clicks", "cost", "orders", "units", "sales"]) row[k] += Number(r[k]);
+    if (includeDetails) row.details.push({ campaignId: String(r.campaign_id), adGroupId: String(r.ad_group_id),
+      campaignName: r.campaign_name, adGroupName: r.ad_group_name, keywordId: r.keyword_id,
+      keyword: r.keyword, matchType: r.match_type, lastSeen: r.last_seen, detailed: Boolean(r.detailed),
+      ...metrics({ ...r, adProduct: r.ad_product }) });
     grouped.set(key, row);
   }
-  const all = [...grouped.values()].map(r => ({ adProduct: r.adProduct, asin: r.asin, term: r.term, counts: r, ...metrics(r) }));
+  const all = [...grouped.values()].map(r => ({ adProduct: r.adProduct, ...(includeDetails ? { details: r.details } : {}), asin: r.asin, term: r.term, counts: r, ...metrics(r) }));
   const matched = all.filter(r => Object.entries(settings.filters).every(([k, f]) => within(r[k], f))
     && !(settings.hideAsins && asinPattern.test(r.term)) && !(settings.hideKeywords && !asinPattern.test(r.term)));
   // Unknown values sort last either way.
@@ -98,7 +119,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     const x = a[settings.sort], y = b[settings.sort];
     return x == null || y == null ? (x == null) - (y == null) : (x - y) * sign;
   };
-  matched.sort((a, b) => byMetric(a, b) || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || a.asin.localeCompare(b.asin));
+  matched.sort((a, b) => byMetric(a, b) || a.term.localeCompare(b.term) || a.adProduct.localeCompare(b.adProduct) || (a.campaignId || "").localeCompare(b.campaignId || "") || (a.adGroupId || "").localeCompare(b.adGroupId || "") || a.asin.localeCompare(b.asin));
   const total = matched.length;
   // A page past the end (the results shrank since it was asked for, after a sync say) gives the
   // last page instead, so the card keeps its rows and pager.

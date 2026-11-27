@@ -7,8 +7,8 @@ export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", 
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
 export const UNAVAILABLE_METRICS = ["breakEvenBid"];
 const usable = k => ZERO_METRICS.includes(k) && !UNAVAILABLE_METRICS.includes(k);
-// The card's column keys (product, ad type, search term, then the metrics), for its saved order.
-export const ZERO_COLUMNS = ["p", "sp", "term", ...ZERO_METRICS];
+// The card's column keys (product, ad type, search term, campaign, ad group, then metrics).
+export const ZERO_COLUMNS = ["p", "sp", "term", "campaignId", "adGroupId", ...ZERO_METRICS];
 
 export const ZERO_DEFAULTS = Object.freeze({
   name: "Search Terms with 0 Sales",
@@ -40,8 +40,24 @@ export const ACOS_DEFAULTS = Object.freeze({
   order: [],
 });
 
+// The Performing Search Terms card has the same dialog and columns; its default filter is
+// conversion at 15% and up, with the best converting terms first.
+export const PERFORMING_DEFAULTS = Object.freeze({
+  name: "Performing Search Terms",
+  description: "[Tip]: Use [Mass Campaigns] to give each keyword its own campaign, then add automation to scale sales.",
+  showTracked: true,
+  hideAsins: true,
+  hideKeywords: false,
+  sort: "conversion",
+  dir: "desc",
+  filters: { conversion: { min: 15 } },
+  track: ["impressions", "clicks", "orders", "sales", "conversion"],
+  // Column keys in the order the headers were dragged into; empty keeps the default order.
+  order: [],
+});
+
 // Each card starts from its own defaults until its settings are saved.
-export const INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS };
+export const INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS, performing: PERFORMING_DEFAULTS };
 
 /** { settings } with everything checked and normalized, or { error } for the first problem. */
 export function cleanInsightSettings(input) {

@@ -2,6 +2,12 @@ import { createClient } from "@libsql/client";
 
 // Turso (libSQL). Every statement is idempotent, so migrate() can run on each cold start.
 const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS ads_keyword_states (
+    profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, kind TEXT NOT NULL,
+    campaign_id TEXT NOT NULL, ad_group_id TEXT NOT NULL, keyword_id TEXT NOT NULL,
+    state TEXT NOT NULL, synced_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product, kind, campaign_id, ad_group_id, keyword_id)
+  )`,
   // Daily Amazon Ads numbers. SP rows are per advertised ASIN; SB rows are per campaign.
   `CREATE TABLE IF NOT EXISTS ads_daily (
     profile_id TEXT NOT NULL,
@@ -33,6 +39,21 @@ const SCHEMA = [
     units INTEGER NOT NULL DEFAULT 0,
     sales REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, search_term)
+  )`,
+  // Keyword-level detail is stored separately so old summary reports remain readable during backfill.
+  `CREATE TABLE IF NOT EXISTS ads_search_term_details_daily (
+    profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, date TEXT NOT NULL,
+    campaign_id TEXT NOT NULL, ad_group_id TEXT NOT NULL, search_term TEXT NOT NULL,
+    keyword_id TEXT NOT NULL DEFAULT '', keyword TEXT NOT NULL DEFAULT '', match_type TEXT NOT NULL DEFAULT '',
+    campaign_name TEXT NOT NULL DEFAULT '', ad_group_name TEXT NOT NULL DEFAULT '',
+    impressions INTEGER NOT NULL DEFAULT 0, clicks INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0, orders INTEGER NOT NULL DEFAULT 0,
+    units INTEGER NOT NULL DEFAULT 0, sales REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, search_term, keyword_id, keyword, match_type)
+  )`,
+  `CREATE TABLE IF NOT EXISTS ads_search_detail_days (
+    profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, date TEXT NOT NULL, synced_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product, date)
   )`,
   // Settings people save for an insight card (filters, sort, columns), as JSON per profile.
   `CREATE TABLE IF NOT EXISTS ads_insight_settings (
@@ -157,6 +178,9 @@ export async function migrate(db) {
           "DELETE FROM ads_synced_days WHERE ad_product IN ('SP_SEARCH', 'SB_SEARCH')",
           "UPDATE ads_report_requests SET status = 'FAILED', error = 'Requested before units were synced' WHERE ad_product IN ('SP_SEARCH', 'SB_SEARCH') AND status IN ('PENDING', 'PROCESSING')",
         ]);
+      }
+      if (!(await columns("ads_report_requests")).includes("search_details")) {
+        await tx.execute("ALTER TABLE ads_report_requests ADD COLUMN search_details INTEGER NOT NULL DEFAULT 0");
       }
       // Product maps built before they had dates are dropped, and marked not ready, so the next sync
       // builds the dated history instead.

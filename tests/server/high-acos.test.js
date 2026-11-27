@@ -1,8 +1,8 @@
 import { createClient } from "@libsql/client";
 import { describe, expect, it, vi } from "vitest";
 import { GET as highAcosRoute } from "../../api/ads/high-acos.js";
-import { PUT as saveRoute } from "../../api/ads/high-acos-settings.js";
-import { ACOS_DEFAULTS, cleanZeroSettings, loadZeroSettings, saveZeroSettings } from "../../server/ads/insight-settings.js";
+import { PUT as saveRoute } from "../../api/ads/[settings].js";
+import { ACOS_DEFAULTS, ZERO_DEFAULTS, cleanZeroSettings, loadZeroSettings, saveZeroSettings } from "../../server/ads/insight-settings.js";
 import { zeroSales } from "../../server/ads/zero-sales.js";
 import { SESSION_COOKIE, createSessionToken } from "../../server/auth.js";
 import { migrate } from "../../server/db.js";
@@ -41,6 +41,23 @@ describe("High ACOS defaults", () => {
 });
 
 describe("zeroSales with the High ACOS defaults", () => {
+  it("keeps a term's product-level ACOS across ad groups", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SB_SEARCH", start: to, end: to, rows: [
+      { ...searchRow("battle ropes", 8, { clicks: 3, orders: 1, sales: 24.99 }), product: "SB_SEARCH" },
+      { ...searchRow("battle ropes", 13.95, { clicks: 20, orders: 0, sales: 0 }), product: "SB_SEARCH", campaignId: "other", adGroupId: "3" },
+    ], syncedAt: "now" });
+    for (const [campaign, group] of [["1", "2"], ["other", "3"]]) {
+      await db.execute({ sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', ?, ?, 'B0PRODUCTA', ?, ?, ?)", args: [profileId, campaign, group, to, to, to] });
+    }
+    const data = await zeroSales(db, { profileId, from, to, settings: ACOS_DEFAULTS });
+    expect(data.rows).toHaveLength(1);
+    expect(data.rows[0]).toMatchObject({ term: "battle ropes", clicks: 23, orders: 1, spend: 21.95, sales: 24.99 });
+    expect(data.rows[0].acos).toBeCloseTo(21.95 / 24.99 * 100);
+    const zeroCard = await zeroSales(db, { profileId, from, to, settings: { ...ZERO_DEFAULTS, filters: {} } });
+    expect(zeroCard.rows[0]).toMatchObject({ term: "battle ropes", clicks: 23, orders: 1, spend: 21.95, sales: 24.99 });
+  });
+
   it("keeps terms from 50% ACOS up, worst first, and hides ASIN terms", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, rows: [

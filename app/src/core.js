@@ -348,7 +348,12 @@
   function gridRows(g) {
     let rows = g.rows.slice();
     if (g.q) { const q = g.q.toLowerCase(); rows = rows.filter(r => Object.values(r).some(v => typeof v !== "object" && String(v).toLowerCase().includes(q)) || (r.p && `${r.p.title} ${r.p.asin} ${r.p.sku}`.toLowerCase().includes(q))); }
-    if (g.sortKey) rows.sort((a, b) => { const x = a[g.sortKey], y = b[g.sortKey]; return (typeof x === "number" && typeof y === "number" ? x - y : String(x ?? "").localeCompare(String(y ?? ""))) * g.dir; });
+    if (g.sortKey) rows.sort((a, b) => {
+      const x = a[g.sortKey], y = b[g.sortKey];
+      if (x == null) return y == null ? 0 : 1;
+      if (y == null) return -1;
+      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * g.dir;
+    });
     return rows;
   }
   function cell(c, r) {
@@ -371,7 +376,7 @@
     h += shown.map((r, i) => {
       const key = r._k ?? `${start + i}`;
       const open = g.open.has(key);
-      return `<tr data-k="${key}">${g.check ? `<td class="c"><input type="checkbox" data-gchk="${key}" ${g.checked.has(key) ? "checked" : ""} aria-label="Select row"></td>` : ""}${g.details ? `<td class="l"><button class="details-btn" data-gdet="${key}">Details ${SP.svg(I.chevron, open ? "up" : "")}</button></td>` : ""}${cols.map(c => cell(c, r)).join("")}</tr>${open && g.details ? `<tr class="detrow"><td colspan="${span}">${g.details(r)}</td></tr>` : ""}`;
+      return `<tr data-k="${key}">${g.check ? `<td class="c"><input type="checkbox" data-gchk="${key}" ${g.checked.has(key) ? "checked" : ""} aria-label="Select row"></td>` : ""}${g.details ? `<td class="l"><button class="details-btn" data-gdet="${key}" aria-expanded="${open}">${open ? "Hide details" : "Details"} ${SP.svg(I.chevron, open ? "up" : "")}</button></td>` : ""}${cols.map(c => cell(c, r)).join("")}</tr>${open && g.details ? `<tr class="detrow"><td colspan="${span}">${g.details(r)}</td></tr>` : ""}`;
     }).join("");
     if (!g.sumTop) h += sumRow;
     // `below`: HTML for a full-width last row, such as a card's own pager under the totals.
