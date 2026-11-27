@@ -7,17 +7,19 @@ const sources = [
 ];
 
 // Current entity state, independent of the historical reporting range. Only list/read calls.
-export async function refreshKeywordStates(db, ads, profileId, { now = Date.now, signal = AbortSignal.timeout(10000) } = {}) {
+export async function refreshKeywordStates(db, ads, profileId, { now = Date.now, signal, sourceTimeoutMs = 10000 } = {}) {
   await migrate(db);
   const errors = [];
   for (const source of sources) {
     try {
       const rows = [], seen = new Set();
+      const timeout = AbortSignal.timeout(sourceTimeoutMs);
+      const sourceSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
       let nextToken, startIndex = 0;
       do {
         const post = Boolean(source.key);
         const path = post ? source.path : `${source.path}?startIndex=${startIndex}&count=100&stateFilter=enabled,paused,archived`;
-        const result = await ads.request(post ? "POST" : "GET", path, { profileId, signal,
+        const result = await ads.request(post ? "POST" : "GET", path, { profileId, signal: sourceSignal,
           accept: source.media, contentType: source.media,
           ...(post ? { body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) } } : {}) });
         if (result.status !== 200) throw new Error(`HTTP ${result.status}`);

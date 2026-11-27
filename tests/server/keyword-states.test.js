@@ -36,4 +36,31 @@ describe('keyword states', () => {
     await refreshKeywordStates(db, { request: async (method, path) => ({ status: 200, data: path === '/sp/keywords/list' ? { keywords: [] } : path === '/sp/targets/list' ? { targetingClauses: [] } : [] }) }, 'profile');
     expect((await db.execute('SELECT * FROM ads_keyword_states')).rows).toEqual([]);
   });
+
+  it('gives each source its own timeout and only replaces sources that finish', async () => {
+    const db = await migrate(createClient({ url: ':memory:' }));
+    await db.batch([
+      "INSERT INTO ads_keyword_states VALUES ('profile','SP_SEARCH','keyword','campaign','group','1','paused','old')",
+      "INSERT INTO ads_keyword_states VALUES ('profile','SP_SEARCH','target','campaign','group','2','paused','old')",
+      "INSERT INTO ads_keyword_states VALUES ('profile','SB_SEARCH','keyword','campaign','group','3','paused','old')",
+    ], "write");
+    let timeoutCount = 0;
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() =>
+      timeoutCount++ === 0 ? AbortSignal.abort(new DOMException("timed out", "TimeoutError")) : new AbortController().signal);
+    const signals = [];
+    try {
+      const errors = await refreshKeywordStates(db, { request: async (method, path, options) => {
+        signals.push(options.signal);
+        if (options.signal.aborted) throw options.signal.reason;
+        return { status: 200, data: path === '/sp/keywords/list' ? { keywords: [] } : path === '/sp/targets/list' ? { targetingClauses: [] } : [] };
+      } }, 'profile');
+      expect(errors).toEqual(["SP_SEARCH keyword state: timed out"]);
+      expect(timeout).toHaveBeenCalledTimes(3);
+      expect(new Set(signals).size).toBe(3);
+      expect((await db.execute("SELECT ad_product, kind FROM ads_keyword_states")).rows)
+        .toEqual([{ ad_product: "SP_SEARCH", kind: "keyword" }]);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
 });
