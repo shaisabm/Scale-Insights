@@ -41,6 +41,28 @@ describe("Performing Search Terms defaults", () => {
 });
 
 describe("zeroSales with the Performing Search Terms defaults", () => {
+  it("applies the same ad-group conversion filter to two-ASIN ad groups", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await storeWindow(db, { profileId, product: "SP_SEARCH", start: to, end: to, rows: [
+      { ...searchRow("weighted rope", 2, { impressions: 4, clicks: 2, orders: 1, sales: 25 }), campaignId: "multi", adGroupId: "winner" },
+      { ...searchRow("weighted rope", 8, { impressions: 40, clicks: 20, orders: 0, sales: 0 }), campaignId: "multi", adGroupId: "loser" },
+      { ...searchRow("weighted rope", 1, { impressions: 2, clicks: 1, orders: 1, sales: 25 }), campaignId: "single", adGroupId: "winner" },
+    ], syncedAt: "now" });
+    await storeWindow(db, { profileId, product: "SP", start: to, end: to, rows: [
+      ...["winner", "loser"].flatMap(adGroupId => ["B0PRODUCTA", "B0PRODUCTB"].map(asin => ({
+        date: to, campaignId: "multi", adGroupId, asin, impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0,
+      }))),
+      { date: to, campaignId: "single", adGroupId: "winner", asin: "B0PRODUCTA", impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 },
+    ], syncedAt: "now" });
+
+    const data = await zeroSales(db, { profileId, from, to, settings: PERFORMING_DEFAULTS, perAdGroup: true });
+    expect(data.rows.map(r => [r.asin, r.campaignId, r.adGroupId, r.term, r.clicks, r.orders, r.conversion])).toEqual([
+      ["B0PRODUCTA", "single", "winner", "weighted rope", 1, 1, 100],
+      ["B0PRODUCTA,B0PRODUCTB", "multi", "winner", "weighted rope", 2, 1, 50],
+    ]);
+    expect(data.total).toBe(2);
+  });
+
   it("filters each campaign and ad group before another group's clicks can dilute conversion", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await storeWindow(db, { profileId, product: "SB_SEARCH", start: to, end: to, rows: [
