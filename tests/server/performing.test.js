@@ -1,7 +1,7 @@
 import { createClient } from "@libsql/client";
 import { describe, expect, it, vi } from "vitest";
 import { GET as performingRoute } from "../../api/ads/performing.js";
-import { PUT as saveRoute } from "../../api/ads/performing-settings.js";
+import { PUT as saveRoute } from "../../api/ads/[settings].js";
 import { PERFORMING_DEFAULTS, cleanZeroSettings, loadZeroSettings, saveZeroSettings } from "../../server/ads/insight-settings.js";
 import { zeroSales } from "../../server/ads/zero-sales.js";
 import { SESSION_COOKIE, createSessionToken } from "../../server/auth.js";
