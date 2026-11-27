@@ -247,6 +247,9 @@
         c.current = data[c.key];
         c.settings = c.current.settings || c.defaults();
         c.changes = 0; c.latest = 0; c.pending = 0; c.submits = 0; c.saving = Promise.resolve();
+        // The page last asked for, which Previous and Next go on from, so they keep a reset to the first
+        // page (new rows per page, dates or settings) that's still loading.
+        c.page = c.current.page || 0;
         // What the account last accepted, which a refused dialog save falls back to.
         c.accepted = c.settings;
       }
@@ -278,11 +281,13 @@
       // local ones are kept then.
       const fetchPage = (c, page) => {
         const id = ++c.latest, changes = c.changes, saving = c.pending > 0;
+        c.page = page;
         if (!SP.usesRealData()) return update(c, c.sample(c.settings, page));
         const size = c.settings.pageSize || 7;
         const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page), pageSize: String(size) });
         return SP.api.get(`${c.api}?${query}`).then(next => {
           if (id !== c.latest) return;
+          c.page = next.page;
           // A save pending at request start can land while the response is under way, so the
           // response may carry the settings from before it even with nothing pending anymore.
           if (changes !== c.changes || saving || c.pending) return update(c, { ...next, settings: c.settings });
@@ -290,7 +295,7 @@
           // the pager and the pages it asks for agree.
           if (next.settings && (next.settings.pageSize || 7) !== size) { c.settings = next.settings; return fetchPage(c, 0); }
           update(c, next);
-        }, err => { if (id === c.latest) SP.toast(err.message); });
+        }, err => { if (id === c.latest) { c.page = c.current.page; SP.toast(err.message); } });
       };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");
@@ -323,9 +328,9 @@
         const host = e.target.closest("[data-zero-card],[data-hacos-card],[data-perf-card]");
         const c = host && Object.values(cards).find(x => host.matches(x.sel));
         if (c) {
-          if (e.target.closest("[data-zero-next]")) fetchPage(c, c.current.page + 1);
-          if (e.target.closest("[data-zero-prev]")) fetchPage(c, c.current.page - 1);
-          if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(c, c.current.page)).catch(err => SP.toast(err.message));
+          if (e.target.closest("[data-zero-next]")) fetchPage(c, c.page + 1);
+          if (e.target.closest("[data-zero-prev]")) fetchPage(c, Math.max(0, c.page - 1));
+          if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(c, c.page)).catch(err => SP.toast(err.message));
         }
         if (e.target.closest("[data-apply]")) Object.values(cards).forEach(x => fetchPage(x, 0));
       });

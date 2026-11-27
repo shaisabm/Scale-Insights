@@ -378,6 +378,44 @@ describe("Search Terms with 0 Sales card", () => {
     expect(document.activeElement).toBe(edit);
   });
 
+  it("pages on from a rows per page reset that's still loading, not from the page it replaces", async () => {
+    stubNavigation();
+    const many = Array.from({ length: 30 }, (_, i) => ({ ...terms[i % terms.length], term: `search term ${i + 1}` }));
+    const asked = [], held = [];
+    let hold = false;
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return json({ settings: JSON.parse(init.body) });
+      const params = new URL(url, location.origin).searchParams, page = Number(params.get("page")), size = Number(params.get("pageSize") || 7);
+      asked.push([page, size]);
+      if (hold) { const reply = later(); held.push(reply); await reply.promise; }
+      const at = Math.max(0, Math.min(page, Math.ceil(many.length / size) - 1));
+      return json({ ...response(0), page: at, pageSize: size, total: many.length, rows: many.slice(at * size, (at + 1) * size) });
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const pager = () => document.querySelector("[data-zero-card] [data-zero-pager]");
+    const showing = () => pager().querySelector(".zero-showing").textContent;
+    const choose = n => { const size = pager().querySelector("[data-zero-size]"); size.value = String(n); size.dispatchEvent(new Event("change", { bubbles: true })); };
+    pager().querySelector("[data-zero-next]").click();
+    await vi.waitFor(() => expect(showing()).toBe("8–14 of 30"));
+    pager().querySelector("[data-zero-next]").click();
+    await vi.waitFor(() => expect(showing()).toBe("15–21 of 30"));
+    // Next is pressed on the old pager before the first page at 10 rows arrives.
+    hold = true;
+    choose(10);
+    pager().querySelector("[data-zero-next]").click();
+    await vi.waitFor(() => expect(asked.slice(-2)).toEqual([[0, 10], [1, 10]]));
+    held.splice(0).forEach(r => r.resolve());
+    await vi.waitFor(() => expect(showing()).toBe("11–20 of 30"));
+    expect(pager().textContent).toContain("Page 2 of 3");
+    // Previous from a reset that's still loading stays on the first page.
+    choose(20);
+    pager().querySelector("[data-zero-prev]").click();
+    await vi.waitFor(() => expect(asked.slice(-2)).toEqual([[0, 20], [0, 20]]));
+    held.splice(0).forEach(r => r.resolve());
+    await vi.waitFor(() => expect(showing()).toBe("1–20 of 30"));
+  });
+
   it("starts over at a rows per page saved elsewhere, so the pager and its requests agree", async () => {
     stubNavigation();
     const asked = [];
