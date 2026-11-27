@@ -257,9 +257,11 @@
         $("a.see", c.el).href = insightLink(c.key, range);
         $("h3", c.el).textContent = c.settings.name;
         $("footer", c.el).textContent = c.settings.description;
+        // The redraw replaces the Rows menu; someone still on it stays on its replacement.
+        const onSize = document.activeElement?.matches("[data-zero-size]") && c.el.contains(document.activeElement);
         $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid);
         const size = $("[data-zero-size]", c.el);
-        if (size) size.value = String(next.pageSize || 7);
+        if (size) { size.value = String(next.pageSize || 7); if (onSize) size.focus(); }
       };
       // Settings are saved whole, so saves run one at a time: each starts once the one before has
       // finished and sends the settings as they are then, so it carries every change made before it
@@ -277,11 +279,17 @@
       const fetchPage = (c, page) => {
         const id = ++c.latest, changes = c.changes, saving = c.pending > 0;
         if (!SP.usesRealData()) return update(c, c.sample(c.settings, page));
-        const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page), pageSize: String(c.settings.pageSize || 7) });
+        const size = c.settings.pageSize || 7;
+        const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page), pageSize: String(size) });
         return SP.api.get(`${c.api}?${query}`).then(next => {
+          if (id !== c.latest) return;
           // A save pending at request start can land while the response is under way, so the
           // response may carry the settings from before it even with nothing pending anymore.
-          if (id === c.latest) update(c, changes !== c.changes || saving || c.pending ? { ...next, settings: c.settings } : next);
+          if (changes !== c.changes || saving || c.pending) return update(c, { ...next, settings: c.settings });
+          // Rows per page saved elsewhere meanwhile: start over from the first page at that size, so
+          // the pager and the pages it asks for agree.
+          if (next.settings && (next.settings.pageSize || 7) !== size) { c.settings = next.settings; return fetchPage(c, 0); }
+          update(c, next);
         }, err => { if (id === c.latest) SP.toast(err.message); });
       };
       root.addEventListener("click", e => {

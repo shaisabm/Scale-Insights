@@ -348,6 +348,60 @@ describe("Search Terms with 0 Sales card", () => {
     expect(asked.at(-1)).toEqual([1, 10]);
   });
 
+  it("keeps focus on the rows per page menu through the redraw, unless it has moved", async () => {
+    stubNavigation();
+    const replies = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return json({ settings: JSON.parse(init.body) });
+      const params = new URL(url, location.origin).searchParams, page = Number(params.get("page")), size = Number(params.get("pageSize") || 7);
+      const body = { ...response(0), page, pageSize: size, rows: terms.slice(page * size, (page + 1) * size) };
+      if (params.has("pageSize")) { const reply = later(); replies.push(reply); await reply.promise; }
+      return json(body);
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const menu = () => document.querySelector("[data-zero-card] [data-zero-size]");
+    const showing = () => document.querySelector("[data-zero-card] .zero-showing").textContent;
+    const choose = n => { menu().focus(); menu().value = String(n); menu().dispatchEvent(new Event("change", { bubbles: true })); };
+    choose(10);
+    await vi.waitFor(() => expect(replies).toHaveLength(1));
+    replies[0].resolve();
+    await vi.waitFor(() => expect(showing()).toBe("1–10 of 11"));
+    expect(document.activeElement).toBe(menu());
+    // Focus moved elsewhere while the page loads stays where it was put.
+    choose(20);
+    await vi.waitFor(() => expect(replies).toHaveLength(2));
+    const edit = document.querySelector("[data-zero-card] [data-edit]");
+    edit.focus();
+    replies[1].resolve();
+    await vi.waitFor(() => expect(showing()).toBe("1–11 of 11"));
+    expect(document.activeElement).toBe(edit);
+  });
+
+  it("starts over at a rows per page saved elsewhere, so the pager and its requests agree", async () => {
+    stubNavigation();
+    const asked = [];
+    let account = 7;
+    vi.stubGlobal("fetch", vi.fn(async url => {
+      const params = new URL(url, location.origin).searchParams, page = Number(params.get("page")), size = Number(params.get("pageSize") || account);
+      asked.push([page, size]);
+      return json({ ...response(0), page, pageSize: size, rows: terms.slice(page * size, (page + 1) * size), settings: { ...savedSettings([]), pageSize: account } });
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const pager = () => document.querySelector("[data-zero-card] [data-zero-pager]");
+    expect(pager().querySelector(".zero-showing").textContent).toBe("1–7 of 11");
+    // Another tab saves 10 rows per page while this one shows 7.
+    account = 10;
+    pager().querySelector("[data-zero-next]").click();
+    await vi.waitFor(() => expect(pager().querySelector(".zero-showing").textContent).toBe("1–10 of 11"));
+    expect(asked.slice(-2)).toEqual([[1, 7], [0, 10]]);
+    expect(pager().querySelector("[data-zero-size]").value).toBe("10");
+    pager().querySelector("[data-zero-next]").click();
+    await vi.waitFor(() => expect(pager().querySelector(".zero-showing").textContent).toBe("11 of 11"));
+    expect(asked.at(-1)).toEqual([1, 10]);
+  });
+
   it("refuses a min above its max and keeps the dialog open", async () => {
     stubNavigation();
     const fetch = vi.fn(async () => new Response(JSON.stringify(response(0)), { status: 200, headers: { "Content-Type": "application/json" } }));
