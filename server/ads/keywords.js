@@ -1,8 +1,8 @@
 import { migrate } from "../db.js";
 import { addDays } from "../http.js";
 import { KEYWORD_ZERO_DEFAULTS } from "./insight-settings.js";
-import { REPORTS, TARGETING_PRODUCTS } from "./sync.js";
-import { cents, dayCount, metrics, productList, within } from "./zero-sales.js";
+import { TARGETING_PRODUCTS } from "./sync.js";
+import { cents, dayCount, firstAvailable, metrics, productList, retentionQuery, within } from "./zero-sales.js";
 
 const SPONSORED = { SP_TARGETING: "Products", SB_TARGETING: "Brands", SD_TARGETING: "Display" };
 // ads_keyword_states keeps Sponsored Products and Brands entities under their search report's name.
@@ -39,7 +39,7 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
   // Rows per page: as asked, else the card's saved choice, else 7.
   const pageSize = asked ?? settings.pageSize ?? 7;
   await migrate(db);
-  const [raw, entities, synced, pending, refused, spProducts, sbProducts, sdProducts, productRows] = await db.batch([
+  const [raw, entities, synced, pending, refused, retention, spProducts, sbProducts, sdProducts, productRows] = await db.batch([
     {
       // With exactly one MAX(), SQLite takes the other plain columns (names, text, kind, bid) from
       // the row it picks: the latest day in the range, so renamed campaigns show their new name.
@@ -60,6 +60,7 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
     { sql: `SELECT ad_product, date FROM ads_synced_days WHERE profile_id = ? AND ad_product IN (${inList}) AND date BETWEEN ? AND ?`, args: [profileId, ...TARGETING_PRODUCTS, from, to] },
     { sql: `SELECT ad_product FROM ads_report_requests WHERE profile_id = ? AND ad_product IN (${inList}) AND status IN ('PENDING', 'PROCESSING') GROUP BY ad_product`, args: [profileId, ...TARGETING_PRODUCTS] },
     { sql: `SELECT ad_product FROM ads_unsupported WHERE profile_id = ? AND ad_product IN (${inList})`, args: [profileId, ...TARGETING_PRODUCTS] },
+    retentionQuery(profileId),
     // The products each ad group advertised in these dates: Sponsored Products through the ads that
     // reported, Sponsored Brands through the history of what its ads listed. Sponsored Display
     // reports name no product and its ads list has no history, so its ad groups take the product
@@ -120,12 +121,13 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
   const known = shown.filter(r => r.pl != null);
   const totals = { ...keywordMetrics(sum), pl: known.length ? cents(known.reduce((n, r) => n + r.pl, 0)) : null, currentBid: null };
   const waiting = new Set(pending.rows.map(r => r.ad_product)), unsupported = new Set(refused.rows.map(r => r.ad_product));
+  const retained = new Map(retention.rows.map(r => [String(r.ad_product), String(r.start_date)]));
   const coverage = {};
   for (const k of TARGETING_PRODUCTS) {
     // An ad type Amazon refused for this account has no reports to wait for.
     if (unsupported.has(k)) continue;
     // Only the dates Amazon can provide are expected to sync; older ones and today aren't.
-    const availableFrom = today ? addDays(today, -REPORTS[k].historyDays) : from;
+    const availableFrom = today ? firstAvailable(today, k, retained) : from;
     const reportedThrough = today ? addDays(today, -1) : to;
     const start = from > availableFrom ? from : availableFrom, end = to < reportedThrough ? to : reportedThrough;
     const days = synced.rows.filter(r => r.ad_product === k && r.date >= start && r.date <= end).length;

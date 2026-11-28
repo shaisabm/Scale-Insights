@@ -316,14 +316,16 @@ export function normalizeRows(product, rows) {
 
 /**
  * Requests one window's report. When Amazon answers that the report type doesn't go back that
- * far, the window starts at the earliest date Amazon gives instead, or is skipped (null).
+ * far, the window starts at the earliest date Amazon gives instead, or is skipped (null), and
+ * `remember` is told that date.
  */
-async function requestReport(ads, profileId, product, w) {
+async function requestReport(ads, profileId, product, w, remember) {
   try {
     return { ...w, reportId: await ads.createReport(profileId, reportSpec(product, w)) };
   } catch (err) {
     const retention = /retention start date \((\d{4}-\d{2}-\d{2})\)/.exec(err.message);
     if (!retention) throw err;
+    await remember(retention[1]);
     if (retention[1] > w.end) return null;
     const clamped = { start: retention[1], end: w.end };
     return { ...clamped, reportId: await ads.createReport(profileId, reportSpec(product, clamped)) };
@@ -436,7 +438,11 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
       let accepted = false;
       for (const w of planWindows({ lastDate, synced, now: now(), historyDays: REPORTS[product].historyDays })) {
         if (pending.some(p => p.ad_product === product && p.start_date <= w.end && p.end_date >= w.start)) continue;
-        const req = await requestReport(ads, profileId, product, w);
+        const req = await requestReport(ads, profileId, product, w, start => db.execute({
+          sql: `INSERT INTO ads_report_retention (profile_id, ad_product, start_date, checked_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT (profile_id, ad_product) DO UPDATE SET start_date = MAX(start_date, excluded.start_date), checked_at = excluded.checked_at`,
+          args: [profileId, product, start, iso()],
+        }));
         if (!req) continue;
         if (!accepted) {
           accepted = true;

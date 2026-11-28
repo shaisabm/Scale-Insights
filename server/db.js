@@ -168,6 +168,15 @@ const SCHEMA = [
     checked_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_product)
   )`,
+  // The earliest date Amazon last said it keeps for a report type, from a request it refused as
+  // older. Its day can be later than historyDays implies, so days before it aren't expected to sync.
+  `CREATE TABLE IF NOT EXISTS ads_report_retention (
+    profile_id TEXT NOT NULL,
+    ad_product TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product)
+  )`,
   // Async report requests that are waiting on Amazon.
   `CREATE TABLE IF NOT EXISTS ads_report_requests (
     report_id TEXT PRIMARY KEY,

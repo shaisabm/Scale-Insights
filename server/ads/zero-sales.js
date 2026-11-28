@@ -22,6 +22,13 @@ export function insightQuery(params, timeZone = process.env.AMAZON_ADS_TIME_ZONE
 export const cents = value => Math.round(Number(value || 0) * 100) / 100;
 const asinPattern = /^B0[A-Z0-9]{8}$/i;
 export const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
+// The first date Amazon still provides for a report type: historyDays before today, or the later
+// retention start Amazon gave when it refused an older one (`retained`, by report type).
+export const firstAvailable = (today, product, retained) => {
+  const kept = addDays(today, -REPORTS[product].historyDays), said = retained.get(product);
+  return said && said > kept ? said : kept;
+};
+export const retentionQuery = profileId => ({ sql: "SELECT ad_product, start_date FROM ads_report_retention WHERE profile_id = ?", args: [profileId] });
 
 /** Every metric the card can filter, sort or show, from summed counts. Null means unknown. */
 export function metrics(r) {
@@ -96,8 +103,10 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     { sql: "SELECT campaign_id, ad_group_id, GROUP_CONCAT(DISTINCT asin) AS asins FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
     { sql: "SELECT ready_through FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
+    retentionQuery(profileId),
   ], "read");
-  const [raw, synced, pending, spProducts, sbMap, productRows] = results;
+  const [raw, synced, pending, spProducts, sbMap, productRows, retention] = results;
+  const retained = new Map(retention.rows.map(r => [String(r.ad_product), String(r.start_date)]));
   const products = new Map(productRows.rows.map(r => [String(r.asin), r]));
   const spAsins = new Map();
   for (const r of spProducts.rows) spAsins.set(`${r.campaign_id}|${r.ad_group_id}`, String(r.asins).split(",").sort().join(","));
@@ -159,7 +168,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   const coverage = {};
   for (const k of ["SP_SEARCH", "SB_SEARCH"]) {
     // Only the dates Amazon can provide are expected to sync; older ones and today aren't.
-    const availableFrom = today ? addDays(today, -REPORTS[k].historyDays) : from;
+    const availableFrom = today ? firstAvailable(today, k, retained) : from;
     const reportedThrough = today ? addDays(today, -1) : to;
     const start = from > availableFrom ? from : availableFrom, end = to < reportedThrough ? to : reportedThrough;
     const days = synced.rows.filter(r => r.ad_product === k && r.date >= start && r.date <= end).length;

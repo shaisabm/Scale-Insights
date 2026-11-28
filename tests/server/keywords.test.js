@@ -5,6 +5,7 @@ import { PUT as saveRoute } from "../../api/ads/[settings].js";
 import { KEYWORD_ZERO_DEFAULTS, cleanInsightSettings } from "../../server/ads/insight-settings.js";
 import { hiddenKeyword, keywordInsight } from "../../server/ads/keywords.js";
 import { normalizeTargets, reportSpec, storeWindow, syncAds } from "../../server/ads/sync.js";
+import { zeroSales } from "../../server/ads/zero-sales.js";
 import { SESSION_COOKIE, createSessionToken } from "../../server/auth.js";
 import { migrate } from "../../server/db.js";
 
@@ -233,6 +234,33 @@ describe("Keywords with 0 Sales", () => {
     expect(await ids({ sort: "topShare", dir: "desc" })).toEqual(["b", "a", "c"]);
     expect(await ids({ filters: { currentBid: { max: 1 } } })).toEqual(["b", "c"]);
     expect(await ids({ filters: { topShare: { min: 10 } } })).toEqual(["b"]);
+  });
+
+  it("stops expecting days Amazon no longer keeps once it refuses them, though historyDays still reaches them", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await store(db, "SB_TARGETING", [], "2026-09-29", "2026-11-26");
+    const asked = [];
+    const ads = {
+      async request(method, path) {
+        if (path === "/sp/keywords/list") return { status: 200, data: { keywords: [] } };
+        if (path === "/sp/targets/list") return { status: 200, data: { targetingClauses: [] } };
+        if (path === "/sb/targets/list") return { status: 200, data: { targets: [] } };
+        return { status: 200, data: [] };
+      },
+      async createReport(profile, spec) {
+        asked.push(spec.startDate);
+        throw new Error(`Report request failed: HTTP 400 {"code":"400","detail":"startDate (${spec.startDate}) must be equal to or after report type data retention start date (2026-09-29)"}`);
+      },
+    };
+    // 01:00 UTC on 28 November is still the 27th in the profile's time zone, so 60 days back is the 28th of September.
+    const summary = await syncAds({ db, ads, profileId, products: ["SB_TARGETING"], now: () => Date.UTC(2026, 10, 28, 1), budgetMs: 30_000, sleep: async () => {} });
+    expect(asked).toEqual(["2026-09-28"]);
+    expect(summary).toMatchObject({ requested: 0, errors: [] });
+    const { coverage } = await keywordInsight(db, { profileId, from: "2026-09-28", to: "2026-11-26", today: "2026-11-27" });
+    expect(coverage.SB_TARGETING).toEqual({ days: 59, expectedDays: 59, pending: false, availableFrom: "2026-09-29", reportedThrough: "2026-11-26" });
+    // The search term cards go by the date Amazon gave for their reports too.
+    await db.execute({ sql: "INSERT INTO ads_report_retention VALUES (?, 'SB_SEARCH', '2026-09-30', 'now')", args: [profileId] });
+    expect((await zeroSales(db, { profileId, from: "2026-09-28", to: "2026-11-26", today: "2026-11-27" })).coverage.SB_SEARCH.availableFrom).toBe("2026-09-30");
   });
 
   it("expects only the dates Amazon can provide, and leaves out ad types Amazon refused", async () => {
