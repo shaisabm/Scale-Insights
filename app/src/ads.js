@@ -845,7 +845,7 @@
       });
       root.addEventListener("click", e => {
         if (e.target.closest("[data-apply]")) update();
-        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(update).catch(err => { error.textContent = err.message; error.hidden = false; });
+        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(summary => { SP.toast(syncMessage(summary)); return update(); }).catch(err => { error.textContent = err.message; error.hidden = false; });
       });
     },
   };

@@ -106,6 +106,19 @@ describe("Main words report", () => {
     for (const tr of bodyRows(grid("words-product-0-terms-0"))) expect(tr.children[0].textContent.split(" ")).toContain(word);
   });
 
+  it("says what Sync now did, then reloads the words", async () => {
+    stubNavigation();
+    const api = stubFetch({
+      "GET /api/ads/search-terms": { from: "2026-09-28", to: "2026-11-26", coverage: { SP_SEARCH: { days: 40, expectedDays: 60 } }, settings: wordSettings(), products: [] },
+      "POST /api/sync/ads": { requested: 1, stored: 0, failed: 0, pending: 1, rows: 0, errors: ["SB_SEARCH: HTTP 429"] },
+    });
+    openApp("/Ads/MainKeywords?filterId=missing-title-words&from=2026-09-28&to=2026-11-26", { realData: true });
+    await vi.waitFor(() => expect(document.querySelector("[data-words-status] [data-zero-sync]")).not.toBeNull());
+    document.querySelector("[data-zero-sync]").click();
+    await vi.waitFor(() => expect(document.querySelector("#toast")?.textContent).toBe("Sync finished with problems: SB_SEARCH: HTTP 429. Some reports are still being prepared."));
+    await vi.waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).startsWith("/api/ads/search-terms"))).toHaveLength(2));
+  });
+
   it("loads the words view of the search terms, and reloads for another filter", async () => {
     stubNavigation();
     const api = stubFetch({
