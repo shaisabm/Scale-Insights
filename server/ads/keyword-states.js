@@ -4,6 +4,10 @@ const sources = [
   { product: "SP_SEARCH", kind: "keyword", path: "/sp/keywords/list", media: "application/vnd.spKeyword.v3+json", key: "keywords", id: "keywordId" },
   { product: "SP_SEARCH", kind: "target", path: "/sp/targets/list", media: "application/vnd.spTargetingClause.v3+json", key: "targetingClauses", id: "targetId" },
   { product: "SB_SEARCH", kind: "keyword", path: "/sb/keywords", media: "application/vnd.sbkeyword.v3+json", id: "keywordId" },
+  // Sponsored Brands product targets are only in its targeting report. Their list takes a plain JSON
+  // request with its own state filter; the v3.2 response includes video ad groups' targets.
+  { product: "SB_SEARCH", kind: "target", path: "/sb/targets/list", media: "application/vnd.sblisttargetsresponse.v3.2+json", contentType: "application/json", key: "targets", id: "targetId",
+    filter: { filters: [{ filterType: "TARGETING_STATE", values: ["enabled", "paused", "archived"] }] }, only: "SB_TARGETING" },
   // Sponsored Display has no search reports, so its targets are only listed for its targeting
   // report, and kept under the ad type's own name.
   { product: "SD", kind: "target", path: "/sd/targets", media: "application/json", id: "targetId", only: "SD_TARGETING" },
@@ -28,8 +32,8 @@ export async function refreshKeywordStates(db, ads, profileId, { now = Date.now,
         const post = Boolean(source.key);
         const path = post ? source.path : `${source.path}?startIndex=${startIndex}&count=100&stateFilter=enabled,paused,archived`;
         const result = await ads.request(post ? "POST" : "GET", path, { profileId, signal: sourceSignal,
-          accept: source.media, contentType: source.media,
-          ...(post ? { body: { maxResults: 100, stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] }, ...(nextToken ? { nextToken } : {}) } } : {}) });
+          accept: source.media, contentType: source.contentType || source.media,
+          ...(post ? { body: { maxResults: 100, ...(source.filter || { stateFilter: { include: ["ENABLED", "PAUSED", "ARCHIVED"] } }), ...(nextToken ? { nextToken } : {}) } } : {}) });
         if (result.status !== 200) throw new Error(`HTTP ${result.status}`);
         const page = post ? result.data?.[source.key] : result.data;
         if (!Array.isArray(page)) throw new Error("Invalid list response");

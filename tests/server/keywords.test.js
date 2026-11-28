@@ -73,6 +73,29 @@ describe("targeting reports", () => {
     expect(coverage.SD_TARGETING).toMatchObject({ days: 1, expectedDays: 1, pending: false });
     expect((await db.execute("SELECT COUNT(*) AS n FROM ads_daily")).rows[0].n).toBe(0);
   });
+
+  it("lists Sponsored Brands product targets for their targeting report, for their state and current bid", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ads = {
+      async request(method, path) {
+        if (path === "/sp/keywords/list") return { status: 200, data: { keywords: [] } };
+        if (path === "/sp/targets/list") return { status: 200, data: { targetingClauses: [] } };
+        if (path === "/sb/targets/list") return { status: 200, data: { targets: [{ campaignId: 8, adGroupId: 9, targetId: 13, state: "paused", bid: 1.4 }, { campaignId: 8, adGroupId: 9, targetId: 14, state: "enabled", bid: 0.65 }] } };
+        return { status: 200, data: [] };
+      },
+      async createReport(profile, spec) { return `report-${spec.configuration.reportTypeId}-${spec.startDate}`; },
+      async getReport(profile, id) { return { status: "COMPLETED", url: id }; },
+      async downloadReport(url) {
+        const row = (targetingId, text) => ({ date: "2026-11-21", campaignId: 8, adGroupId: 9, campaignName: "SB-PRODUCT", adGroupName: "Competitors", targetingId, targetingText: text, targetingType: "TARGETING_EXPRESSION", keywordBid: 1, impressions: 50, clicks: 3, cost: 21, purchases: 0, unitsSold: 0, sales: 0 });
+        return url.startsWith("report-sbTargeting") ? [row(13, "asin=\"B0ABCDEFGH\""), row(14, "asin=\"B0ABCDEFGJ\"")] : [];
+      },
+    };
+    const summary = await syncAds({ db, ads, profileId, products: ["SB_TARGETING"], now: () => Date.UTC(2026, 10, 22, 15), budgetMs: 30_000, sleep: async () => {} });
+    expect(summary.errors).toEqual([]);
+    const report = async changes => (await keywordInsight(db, { profileId, from: "2026-11-21", to: "2026-11-21", settings: { ...defaults(), ...changes } })).rows;
+    expect((await report({})).map(r => [r.keywordId, r.sponsored, r.kind, r.state, r.currentBid])).toEqual([["13", "Brands", "target", "paused", 1.4], ["14", "Brands", "target", "enabled", 0.65]]);
+    expect((await report({ hidePausedTargets: true })).map(r => r.keywordId)).toEqual(["14"]);
+  });
 });
 
 describe("Keywords with 0 Sales", () => {
