@@ -57,14 +57,14 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords" };
+  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords", kwa: "high-acos-keywords" };
   // Search term cards open the Search terms report, and keyword cards the Performance report's
   // Keywords tab, filtered by the card and for its dates.
   const insightLink = (id, range = {}) => {
     const initial = SP.rangeFor("Last 30 Days");
-    return `${id === "kw0" ? "/Ads/Performance/Keywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
+    return `${id.startsWith("kw") ? "/Ads/Performance/Keywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
   };
-  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card" };
+  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card", kwa: "data-kwa-card" };
   const card = (title, body, tip, id, range) => `<section class="icard" ${CARD_ATTRS[id]}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${insightLink(id, range)}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
@@ -100,6 +100,9 @@
   // bid next to the clicks.
   const KEYWORD_ZERO_DEFAULTS = { name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true, hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false, sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7 };
   const keywordDefaults = () => JSON.parse(JSON.stringify(KEYWORD_ZERO_DEFAULTS));
+  // Keywords and targets that spent $20 or more at an ACOS of 60% or more, worst ACOS first.
+  const KEYWORD_HIGH_ACOS_DEFAULTS = { ...KEYWORD_ZERO_DEFAULTS, name: "Keywords with High ACOS", description: "[Tip]: You can automatically lower the bids of keywords with high ACOS using Automation.", sort: "acos", filters: { acos: { min: 60 }, spend: { min: 20 } }, track: ["clicks", "units", "cpc", "conversion", "acos", "spend", "pl", "currentBid"], order: ["p", "campaign", "adGroup", "keyword", "clicks", "units", "conversion", "spend", "currentBid", "cpc", "acos", "pl"] };
+  const keywordAcosDefaults = () => JSON.parse(JSON.stringify(KEYWORD_HIGH_ACOS_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
   const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
@@ -141,6 +144,22 @@
     ["Products", `SP-EXACT-RANK - ${P[0].asin}`, "Exact", "jump rope for women", "keyword", "exact", "enabled", 4000, 40, 38.2, 74.97, 3, 1.14],
     ["Products", `SP-PHRASE-DISCOVERY - ${P[1].asin}`, "Phrase", "cordless battle ropes", "keyword", "phrase", "enabled", 900, 9, 8.1, 0, 0, 0.95],
   ];
+  // Keyword sample rows for the High ACOS card, in the same shape. Beyond the eight its default
+  // filter keeps, there's an auto target, a keyword below 60% ACOS and one that spent too little.
+  /** @type {[string, string, string, string, string, string, string, number, number, number, number, number, number][]} */
+  const ACOS_KEYWORDS = [
+    ["Products", "SP - Training Ropes - ALL", "Exact", "battle ropes for home gym", "keyword", "exact", "enabled", 3900, 41, 42.88, 20.99, 1, 0.95],
+    ["Display", `SD-BROAD-VIDEO - ${P[1].asin}`, `${P[1].asin} - Pink`, "audiences-likely-interested-in-ad", "target", "", "enabled", 26400, 222, 87.04, 45.98, 2, 0.32],
+    ["Products", `SP-BROAD-DISCOVERY - ${P[0].asin}`, "Broad", "cordless jump rope", "keyword", "broad", "enabled", 3300, 35, 32.69, 20.99, 1, 0.8],
+    ["Brands", "SBV - JUMP ROPE VIDEO - Red", "JUMP ROPE VIDEO", "jump rope with counter", "keyword", "broad", "enabled", 7100, 68, 77.95, 50.98, 2, 1.08],
+    ["Brands", `SB-BROAD-BUNDLE VIDEO - ${P[0].asin}`, "Broad", "speed jump rope", "keyword", "broad", "paused", 3000, 32, 33.85, 24.99, 1, 1],
+    ["Products", "SP - Training Ropes - ALL", "Broad", "cordless training rope", "keyword", "broad", "enabled", 6600, 70, 62.37, 51.98, 2, 0.76],
+    ["Products", `SP-PRODUCT-TARGETING - ${P[1].asin}`, "Competitors", `asin="${P[2].asin}"`, "target", "", "enabled", 2500, 28, 27.99, 24.99, 1, 1.25],
+    ["Products", `SP-PHRASE-DISCOVERY - ${P[1].asin}`, "Phrase", "workout equipment for women", "keyword", "phrase", "enabled", 3200, 34, 26.48, 24.99, 1, 0.75],
+    ["Products", `SP-AUTO-RANK - ${P[0].asin}`, "Auto", "loose-match", "auto", "", "enabled", 19800, 213, 200.61, 49.98, 2, 0.8],
+    ["Products", `SP-EXACT-RANK - ${P[0].asin}`, "Exact", "weighted jump rope", "keyword", "exact", "enabled", 5400, 60, 51.11, 99.97, 4, 0.8],
+    ["Brands", "SBV - TRAINING ROPE VIDEO - Blue", "TRAINING ROPE VIDEO", "battle ropes", "keyword", "broad", "enabled", 1500, 14, 12.4, 9.99, 1, 1.1],
+  ];
   // The product is the one the campaign names, else one of the two.
   const keywordRow = ([sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, spend, sales, orders, currentBid], i) => ({
     p: P.slice(0, 2).find(p => campaign.includes(p.asin)) || P[i % 2],
@@ -173,6 +192,7 @@
   const sampleAcos = (settings = acosDefaults(), page = 0) => sampleInsight(ACOS_TERMS.map(acosRow), settings, page);
   const samplePerf = (settings = performingDefaults(), page = 0) => sampleInsight(PERFORMING_TERMS.map(acosRow), settings, page);
   const sampleKeywords = (settings = keywordDefaults(), page = 0) => sampleInsight(KEYWORDS.map(keywordRow), settings, page, keywordHidden(settings));
+  const sampleKeywordAcos = (settings = keywordAcosDefaults(), page = 0) => sampleInsight(ACOS_KEYWORDS.map(keywordRow), settings, page, keywordHidden(settings));
   const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
   // A row naming several products (an ad group advertising them all) shows the first one's photo with
@@ -269,31 +289,35 @@
   SP.pages["/Ads"] = {
     title: "Insights overview",
     load: () => {
-      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords() });
+      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords(), kwa: sampleKeywordAcos() });
       const r = SP.rangeFor("Last 30 Days"), q = new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" });
-      // The keyword card loads on its own, so if it fails the search term cards still show.
-      const keywords = SP.api.get(`/api/ads/keywords?filterId=zero-sales-keywords&${q}`).catch(err => ({ error: err.message }));
-      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords]).then(([st0, acos, perf, kw0]) => ({ st0, acos, perf, kw0 }));
+      // The keyword cards load on their own, so if one fails the other cards still show.
+      const keywords = filterId => SP.api.get(`/api/ads/keywords?filterId=${filterId}&${q}`).catch(err => ({ error: err.message }));
+      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords("zero-sales-keywords"), keywords("high-acos-keywords")])
+        .then(([st0, acos, perf, kw0, kwa]) => ({ st0, acos, perf, kw0, kwa }));
     },
     render(data) {
       const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults(), ks = data.kw0.settings || keywordDefaults();
+      const ka = data.kwa.settings || keywordAcosDefaults();
       const c1 = zeroBody(data.st0, zs, "i1");
       const c2 = zeroBody(data.acos, as, "i2");
       const c3 = zeroBody(data.perf, ps, "i3");
       const c4 = keywordBody(data.kw0, ks, "i4");
+      const c5 = keywordBody(data.kwa, ka, "i5");
       const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
         ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0", data.st0)}
         ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos", data.acos)}
         ${card(SP.esc(ps.name), c3, SP.esc(ps.description), "perf", data.perf)}
-        ${card(SP.esc(ks.name), c4, SP.esc(ks.description), "kw0", data.kw0)}`;
+        ${card(SP.esc(ks.name), c4, SP.esc(ks.description), "kw0", data.kw0)}
+        ${card(SP.esc(ka.name), c5, SP.esc(ka.description), "kwa", data.kwa)}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
     wire(root, data) {
       const initial = SP.rangeFor("Last 30 Days");
       let range = { from: data.st0.from || SP.iso(initial.from), to: data.st0.to || SP.iso(initial.to) };
-      // The three search term cards and the keyword card run the same machinery against their own
-      // endpoint and settings; the keyword card has its own columns and dialog.
+      // The three search term cards and the two keyword cards run the same machinery against their
+      // own endpoint and settings; the keyword cards have their own columns and dialog.
       const searchCard = { body: zeroBody, spec: SEARCH_SPEC, params: {} };
       // Each card also keeps its element, data, settings and request state (set below).
       /** @type {Record<string, any>} */
@@ -302,6 +326,7 @@
         acos: { ...searchCard, key: "acos", sel: "[data-hacos-card]", grid: "i2", api: "/api/ads/high-acos", saveApi: "/api/ads/high-acos-settings", defaults: acosDefaults, sample: sampleAcos },
         perf: { ...searchCard, key: "perf", sel: "[data-perf-card]", grid: "i3", api: "/api/ads/performing", saveApi: "/api/ads/performing-settings", defaults: performingDefaults, sample: samplePerf },
         kw0: { key: "kw0", sel: "[data-kw-card]", grid: "i4", api: "/api/ads/keywords", params: { filterId: "zero-sales-keywords" }, saveApi: "/api/ads/zero-sales-keywords-settings", defaults: keywordDefaults, sample: sampleKeywords, body: keywordBody, spec: KEYWORD_SPEC },
+        kwa: { key: "kwa", sel: "[data-kwa-card]", grid: "i5", api: "/api/ads/keywords", params: { filterId: "high-acos-keywords" }, saveApi: "/api/ads/high-acos-keywords-settings", defaults: keywordAcosDefaults, sample: sampleKeywordAcos, body: keywordBody, spec: KEYWORD_SPEC },
       };
       const cardSel = Object.values(cards).map(c => c.sel).join(",");
       for (const c of Object.values(cards)) {
@@ -476,14 +501,19 @@
 
   const PERF_DIMS = ["Products", "Ad types", "Portfolios", "Campaigns", "Ad groups", "Product ads", "Keywords", "Match types", "Placements"];
   // Keyword filters the Keywords tab can show, by the filterId an insight card links with.
-  const KEYWORD_FILTERS = { "zero-sales-keywords": "Keywords with 0 Sales" };
+  const KEYWORD_FILTERS = { "zero-sales-keywords": "Keywords with 0 Sales", "high-acos-keywords": "Keywords with High ACOS" };
+  // The sample keywords each of those filters keeps with its default settings, all on one page.
+  const filterSamples = {
+    "zero-sales-keywords": () => sampleKeywords({ ...keywordDefaults(), pageSize: KEYWORDS.length }).rows,
+    "high-acos-keywords": () => sampleKeywordAcos({ ...keywordAcosDefaults(), pageSize: ACOS_KEYWORDS.length }).rows,
+  };
   // One tab's columns and sample rows. The Keywords tab with a keyword filter shows the sample
   // keywords that filter's default settings keep, with their campaign and ad group.
   const perfView = (i, filterId) => {
     if (i === 0) return { cols: perfCols, rows: perfRows };
     const dim = PERF_DIMS[i];
     if (dim === "Keywords" && KEYWORD_FILTERS[filterId]) {
-      const kept = sampleKeywords({ ...keywordDefaults(), pageSize: KEYWORDS.length }).rows;
+      const kept = filterSamples[filterId]();
       return { cols: [{ key: "campaign", label: "Campaign", filter: true }, { key: "adGroup", label: "Ad group", filter: true }, { key: "name", label: "Keyword", filter: true }, ...perfCols.slice(2)],
         rows: kept.map(k => ({ campaign: k.campaign, adGroup: k.adGroup, name: k.keyword, imp: k.impressions, clicks: k.clicks, orders: k.orders, units: k.units, sales: k.sales, conv: k.conversion, spend: k.spend, acos: k.acos || 0, cpc: k.cpc })) };
     }
@@ -494,7 +524,7 @@
   };
 
   // The report opens on the tab its address names (/Ads/Performance/Keywords opens Keywords), and a
-  // filterId (as the Keywords with 0 Sales card links with) picks the filter.
+  // filterId (as the keyword cards link with) picks the filter.
   const performancePage = tab => ({
     title: "Performance",
     render() {
