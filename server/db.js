@@ -55,6 +55,29 @@ const SCHEMA = [
     profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, date TEXT NOT NULL, synced_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_product, date)
   )`,
+  // Daily numbers per keyword or target, from the targeting reports of each ad type, with the names,
+  // text, match type, bid and top-of-search impression share (a percentage) reported that day.
+  // kind is keyword (exact, phrase or broad), auto (automatic targeting) or target (products,
+  // categories and audiences).
+  `CREATE TABLE IF NOT EXISTS ads_targets_daily (
+    profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, date TEXT NOT NULL,
+    campaign_id TEXT NOT NULL, ad_group_id TEXT NOT NULL, target_id TEXT NOT NULL,
+    campaign_name TEXT NOT NULL DEFAULT '', ad_group_name TEXT NOT NULL DEFAULT '',
+    target TEXT NOT NULL DEFAULT '', match_type TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL,
+    bid REAL, top_share REAL,
+    impressions INTEGER NOT NULL DEFAULT 0, clicks INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0, orders INTEGER NOT NULL DEFAULT 0,
+    units INTEGER NOT NULL DEFAULT 0, sales REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (profile_id, ad_product, date, campaign_id, ad_group_id, target_id)
+  )`,
+  // Current bids of the keywords and targets in ads_keyword_states, from the same lists. A null bid
+  // means the entity uses its ad group's default bid.
+  `CREATE TABLE IF NOT EXISTS ads_keyword_bids (
+    profile_id TEXT NOT NULL, ad_product TEXT NOT NULL, kind TEXT NOT NULL,
+    campaign_id TEXT NOT NULL, ad_group_id TEXT NOT NULL, keyword_id TEXT NOT NULL,
+    bid REAL, synced_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product, kind, campaign_id, ad_group_id, keyword_id)
+  )`,
   // Settings people save for an insight card (filters, sort, columns), as JSON per profile.
   `CREATE TABLE IF NOT EXISTS ads_insight_settings (
     profile_id TEXT NOT NULL,
@@ -88,6 +111,18 @@ const SCHEMA = [
     asins TEXT NOT NULL,
     created_ms INTEGER,
     updated_ms INTEGER,
+    PRIMARY KEY (profile_id, ad_id)
+  )`,
+  // Sponsored Display product ads as last listed: the ASIN each ad advertises, in its ad group. Its
+  // reports name no product, so its keywords and targets are matched to products through these.
+  `CREATE TABLE IF NOT EXISTS ads_sd_product_ads (
+    profile_id TEXT NOT NULL,
+    ad_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    ad_group_id TEXT NOT NULL,
+    asin TEXT NOT NULL,
+    state TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_id)
   )`,
   // Titles and image URLs of advertised products, from the Ads API product metadata lookup.
@@ -130,6 +165,15 @@ const SCHEMA = [
     profile_id TEXT NOT NULL,
     ad_product TEXT NOT NULL,
     reason TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_product)
+  )`,
+  // The earliest date Amazon last said it keeps for a report type, from a request it refused as
+  // older. Its day can be later than historyDays implies, so days before it aren't expected to sync.
+  `CREATE TABLE IF NOT EXISTS ads_report_retention (
+    profile_id TEXT NOT NULL,
+    ad_product TEXT NOT NULL,
+    start_date TEXT NOT NULL,
     checked_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, ad_product)
   )`,

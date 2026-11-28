@@ -9,8 +9,8 @@ const PAGE = 300;
 export async function refreshProducts(db, ads, profileId, at = new Date().toISOString()) {
   // History rows list an ad group's ASINs comma-separated; a group advertising several needs them all.
   const known = await db.execute({
-    sql: "SELECT DISTINCT asin FROM ads_daily WHERE profile_id = ? AND asin <> '' UNION SELECT asins FROM ads_search_product_history WHERE profile_id = ?",
-    args: [profileId, profileId],
+    sql: "SELECT DISTINCT asin FROM ads_daily WHERE profile_id = ? AND asin <> '' UNION SELECT asins FROM ads_search_product_history WHERE profile_id = ? UNION SELECT asin FROM ads_sd_product_ads WHERE profile_id = ?",
+    args: [profileId, profileId, profileId],
   });
   const asins = [...new Set(known.rows.flatMap(r => String(r.asin).split(",")))].sort();
   const stmts = [];
@@ -31,6 +31,36 @@ export async function refreshProducts(db, ads, profileId, at = new Date().toISOS
   }
   if (stmts.length) await db.batch(stmts, "write");
   return stmts.length;
+}
+
+const SD_PAGE = 100;
+
+/**
+ * The product each Sponsored Display ad advertises, in every state, from the read-only product ads
+ * list. A list that fails partway keeps the one stored before.
+ */
+export async function refreshSdProductAds(db, ads, profileId, { now = Date.now, timeoutMs = 10000 } = {}) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const listed = [];
+  for (let startIndex = 0; ; startIndex += SD_PAGE) {
+    const { status, data } = await ads.request("GET", `/sd/productAds?startIndex=${startIndex}&count=${SD_PAGE}&stateFilter=enabled,paused,archived`, { profileId, signal });
+    if (status !== 200) throw new Error(`HTTP ${status}`);
+    if (!Array.isArray(data)) throw new Error("Invalid list response");
+    listed.push(...data);
+    if (data.length < SD_PAGE) break;
+  }
+  const at = new Date(now()).toISOString();
+  const stmts = [{ sql: "DELETE FROM ads_sd_product_ads WHERE profile_id = ?", args: [profileId] }];
+  // An ad for a landing page rather than a product has no ASIN.
+  for (const ad of listed.filter(a => a.asin)) {
+    if (ad.adId == null || ad.campaignId == null || ad.adGroupId == null) throw new Error("Missing ad identity");
+    stmts.push({
+      sql: "INSERT OR REPLACE INTO ads_sd_product_ads (profile_id, ad_id, campaign_id, ad_group_id, asin, state, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      args: [profileId, String(ad.adId), String(ad.campaignId), String(ad.adGroupId), String(ad.asin), String(ad.state || "").toLowerCase(), at],
+    });
+  }
+  await db.batch(stmts, "write");
+  return stmts.length - 1;
 }
 
 // Amazon's product image hosts. Anything else is refused, so the image route can't be pointed

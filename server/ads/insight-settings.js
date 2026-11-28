@@ -1,12 +1,11 @@
 import { migrate } from "../db.js";
 
-// Settings for the search term insight cards ("Search Terms with 0 Sales", "Search Terms with
-// High ACOS"): their name and tip, which search terms they list, how they're sorted, and which
-// metric columns they show. Saved per profile and per card.
+// Settings for the insight cards ("Search Terms with 0 Sales", "Search Terms with High ACOS",
+// "Keywords with 0 Sales"): their name and tip, which search terms or keywords they list, how
+// they're sorted, and which metric columns they show. Saved per profile and per card.
 export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "roas", "spend", "sales", "pl", "breakEvenBid"];
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
 export const UNAVAILABLE_METRICS = ["breakEvenBid"];
-const usable = k => ZERO_METRICS.includes(k) && !UNAVAILABLE_METRICS.includes(k);
 // The card's column keys (product, ad type, search term, campaign, ad group, then metrics).
 export const ZERO_COLUMNS = ["p", "sp", "term", "campaignId", "adGroupId", ...ZERO_METRICS];
 
@@ -65,17 +64,62 @@ export const PERFORMING_DEFAULTS = Object.freeze({
   pageSize: 7,
 });
 
-// Each card starts from its own defaults until its settings are saved.
-export const INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS, performing: PERFORMING_DEFAULTS };
+// The keyword insight cards ("Keywords with 0 Sales") list keywords and targets instead. They add
+// top-of-search impression share and the current bid to the metrics, in the dialog's order.
+export const KEYWORD_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "topShare", "roas", "spend", "sales", "pl", "breakEvenBid", "currentBid"];
+// The card's column keys (product, campaign, ad group, keyword or target, then metrics).
+export const KEYWORD_COLUMNS = ["p", "campaign", "adGroup", "keyword", ...KEYWORD_METRICS];
+// What a keyword card can leave out: product, keyword and auto targets, each keyword match type,
+// and paused keywords or targets.
+export const KEYWORD_HIDES = ["hideProductTargets", "hideKeywordTargets", "hideAutoTargets", "hideExact", "hidePhrase", "hideBroad", "hidePausedKeywords", "hidePausedTargets"];
 
-/** { settings } with everything checked and normalized, or { error } for the first problem. */
-export function cleanInsightSettings(input) {
+// Keywords and targets that spent $20 or more without an order, costliest first, leaving out auto
+// targets.
+export const KEYWORD_ZERO_DEFAULTS = Object.freeze({
+  name: "Keywords with 0 Sales",
+  description: "[Tip]: You can automatically reduce poor keyword bids using Automation.",
+  showTracked: true,
+  hideProductTargets: false,
+  hideKeywordTargets: false,
+  hideAutoTargets: true,
+  hideExact: false,
+  hidePhrase: false,
+  hideBroad: false,
+  hidePausedKeywords: false,
+  hidePausedTargets: false,
+  sort: "spend",
+  dir: "desc",
+  filters: { orders: { max: 0 }, spend: { min: 20 } },
+  track: ["clicks", "cpc", "pl", "currentBid"],
+  // The current bid sits next to the clicks, as in the original card.
+  order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"],
+  pageSize: 7,
+});
+
+// Each card starts from its own defaults until its settings are saved.
+export const SEARCH_INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS, performing: PERFORMING_DEFAULTS };
+export const KEYWORD_INSIGHT_DEFAULTS = { "zero-sales-keywords": KEYWORD_ZERO_DEFAULTS };
+export const INSIGHT_DEFAULTS = { ...SEARCH_INSIGHT_DEFAULTS, ...KEYWORD_INSIGHT_DEFAULTS };
+
+// What a card's settings may name: search term cards and keyword cards differ in metrics, columns
+// and what they can hide.
+const SEARCH_SPEC = { metrics: ZERO_METRICS, columns: ZERO_COLUMNS, hides: ["hideAsins", "hideKeywords"] };
+const KEYWORD_SPEC = { metrics: KEYWORD_METRICS, columns: KEYWORD_COLUMNS, hides: KEYWORD_HIDES };
+const specOf = defaults => (Object.values(KEYWORD_INSIGHT_DEFAULTS).includes(defaults) ? KEYWORD_SPEC : SEARCH_SPEC);
+
+/**
+ * { settings } with everything checked and normalized, or { error } for the first problem.
+ * `defaults` says which card they're for.
+ */
+export function cleanInsightSettings(input, defaults = ZERO_DEFAULTS) {
+  const spec = specOf(defaults);
+  const usable = k => spec.metrics.includes(k) && !UNAVAILABLE_METRICS.includes(k);
   if (!input || typeof input !== "object") return { error: "Settings must be an object." };
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 80) return { error: "The name must be 1 to 80 characters." };
   const description = typeof input.description === "string" ? input.description.trim() : null;
   if (description === null || description.length > 300) return { error: "The description must be at most 300 characters." };
-  for (const k of ["showTracked", "hideAsins", "hideKeywords"]) if (typeof input[k] !== "boolean") return { error: `${k} must be true or false.` };
+  for (const k of ["showTracked", ...spec.hides]) if (typeof input[k] !== "boolean") return { error: `${k} must be true or false.` };
   if (!usable(input.sort) || !["asc", "desc"].includes(input.dir)) return { error: "Choose a sort order from the list." };
   const filters = {};
   for (const [k, f] of Object.entries(input.filters || {})) {
@@ -92,14 +136,15 @@ export function cleanInsightSettings(input) {
     if (Object.keys(limits).length) filters[k] = limits;
   }
   if (!Array.isArray(input.track) || input.track.some(k => !usable(k))) return { error: "Only available metrics can be tracked." };
-  const track = ZERO_METRICS.filter(k => input.track.includes(k));
+  const track = spec.metrics.filter(k => input.track.includes(k));
   // Settings saved before columns could be moved have no order.
   const order = input.order ?? [];
-  if (!Array.isArray(order) || order.some(k => !ZERO_COLUMNS.includes(k)) || new Set(order).size !== order.length) return { error: "The column order can only list the card's columns, each once." };
+  if (!Array.isArray(order) || order.some(k => !spec.columns.includes(k)) || new Set(order).size !== order.length) return { error: "The column order can only list the card's columns, each once." };
   // Settings saved before the rows per page could be chosen show 7.
   const pageSize = input.pageSize ?? 7;
   if (!PAGE_SIZES.includes(pageSize)) return { error: "Choose 7, 10, 20, 30 or 50 rows per page." };
-  return { settings: { name, description, showTracked: input.showTracked, hideAsins: input.hideAsins, hideKeywords: input.hideKeywords, sort: input.sort, dir: input.dir, filters, track, order, pageSize } };
+  const hides = Object.fromEntries(spec.hides.map(k => [k, input[k]]));
+  return { settings: { name, description, showTracked: input.showTracked, ...hides, sort: input.sort, dir: input.dir, filters, track, order, pageSize } };
 }
 
 // The insight key a defaults object belongs to, which settings are stored under.

@@ -19,9 +19,16 @@ export function insightQuery(params, timeZone = process.env.AMAZON_ADS_TIME_ZONE
   return { from, to, today, page, ...(pageSize ? { pageSize } : {}) };
 }
 
-const cents = value => Math.round(Number(value || 0) * 100) / 100;
+export const cents = value => Math.round(Number(value || 0) * 100) / 100;
 const asinPattern = /^B0[A-Z0-9]{8}$/i;
-const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
+export const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
+// The first date Amazon still provides for a report type: historyDays before today, or the later
+// retention start Amazon gave when it refused an older one (`retained`, by report type).
+export const firstAvailable = (today, product, retained) => {
+  const kept = addDays(today, -REPORTS[product].historyDays), said = retained.get(product);
+  return said && said > kept ? said : kept;
+};
+export const retentionQuery = profileId => ({ sql: "SELECT ad_product, start_date FROM ads_report_retention WHERE profile_id = ?", args: [profileId] });
 
 /** Every metric the card can filter, sort or show, from summed counts. Null means unknown. */
 export function metrics(r) {
@@ -38,6 +45,16 @@ export function metrics(r) {
 }
 
 export const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f.min) && (f.max == null || v - 0.000001 <= f.max);
+
+/**
+ * The products a row names (sorted, comma-separated ASINs), each with its title and image, from
+ * `products` (ads_products rows by ASIN). Images are served by /api/ads/product-image, which
+ * fetches them from Amazon on the server.
+ */
+export const productList = (products, asins) => asins.split(",").map(asin => {
+  const product = products.get(asin);
+  return { asin, title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(asin)}` : null };
+});
 
 /**
  * One search term per ad type and advertised product set for every insight card. Counts are aggregated over the chosen dates before the
@@ -86,8 +103,10 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     { sql: "SELECT campaign_id, ad_group_id, GROUP_CONCAT(DISTINCT asin) AS asins FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id", args: [profileId, from, to] },
     { sql: "SELECT ready_through FROM ads_product_map_status WHERE profile_id = ? AND ad_product = 'SB_SEARCH'", args: [profileId] },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
+    retentionQuery(profileId),
   ], "read");
-  const [raw, synced, pending, spProducts, sbMap, productRows] = results;
+  const [raw, synced, pending, spProducts, sbMap, productRows, retention] = results;
+  const retained = new Map(retention.rows.map(r => [String(r.ad_product), String(r.start_date)]));
   const products = new Map(productRows.rows.map(r => [String(r.asin), r]));
   const spAsins = new Map();
   for (const r of spProducts.rows) spAsins.set(`${r.campaign_id}|${r.ad_group_id}`, String(r.asins).split(",").sort().join(","));
@@ -129,13 +148,9 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   // last page instead, so the card keeps its rows and pager.
   const at = Math.min(page, Math.max(0, Math.ceil(total / pageSize) - 1));
   const shown = matched.slice(at * pageSize, (at + 1) * pageSize);
-  // Images are served by /api/ads/product-image, which fetches them from Amazon on the server.
   // title and image are the first product's; `products` lists every product the row names.
   const rows = shown.map(r => {
-    const list = r.asin.split(",").map(asin => {
-      const product = products.get(asin);
-      return { asin, title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(asin)}` : null };
-    });
+    const list = productList(products, r.asin);
     // counts stays server-side; an undefined property is left out of the JSON.
     return { ...r, counts: undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: list[0].title, image: list[0].image, products: list };
   });
@@ -153,7 +168,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   const coverage = {};
   for (const k of ["SP_SEARCH", "SB_SEARCH"]) {
     // Only the dates Amazon can provide are expected to sync; older ones and today aren't.
-    const availableFrom = today ? addDays(today, -REPORTS[k].historyDays) : from;
+    const availableFrom = today ? firstAvailable(today, k, retained) : from;
     const reportedThrough = today ? addDays(today, -1) : to;
     const start = from > availableFrom ? from : availableFrom, end = to < reportedThrough ? to : reportedThrough;
     const days = synced.rows.filter(r => r.ad_product === k && r.date >= start && r.date <= end).length;

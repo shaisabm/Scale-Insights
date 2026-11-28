@@ -1,4 +1,4 @@
-import { INSIGHT_DEFAULTS, loadZeroSettings } from "../../server/ads/insight-settings.js";
+import { SEARCH_INSIGHT_DEFAULTS as INSIGHT_DEFAULTS, loadZeroSettings } from "../../server/ads/insight-settings.js";
 import { searchTerms, ALL_TERMS } from "../../server/ads/search-terms.js";
 import { insightQuery } from "../../server/ads/zero-sales.js";
 import { requireUser } from "../../server/auth.js";
