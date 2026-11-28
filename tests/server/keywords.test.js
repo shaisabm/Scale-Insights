@@ -48,15 +48,28 @@ describe("targeting reports", () => {
     expect(sd).toMatchObject({ targetId: "13", target: "audiences-likely-interested-in-ad", kind: "target", bid: null, topShare: null, clicks: 3 });
   });
 
-  it("collects targeting reports into their own table and lists Sponsored Display targets for their bids", async () => {
+  it("collects targeting reports into their own table and lists Sponsored Display targets for their bids and product ads for their products", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     const listed = [];
+    // A full first page of other ad groups' product ads, then this ad group's and one for a landing page.
+    const productAds = [...Array.from({ length: 100 }, (_, i) => ({ adId: `other${i}`, campaignId: 11, adGroupId: 99, asin: "B0PRODUCTB", state: "archived" })),
+      { adId: 21, campaignId: 11, adGroupId: 12, asin: "B0PRODUCTA", state: "ENABLED" }, { adId: 22, campaignId: 11, adGroupId: 12, landingPageURL: "https://www.amazon.com/stores/x", state: "enabled" }];
     const ads = {
-      async request(method, path) {
+      async request(method, path, { body } = {}) {
         listed.push(path.split("?")[0]);
         if (path === "/sp/keywords/list") return { status: 200, data: { keywords: [] } };
         if (path === "/sp/targets/list") return { status: 200, data: { targetingClauses: [] } };
         if (path.startsWith("/sd/targets?")) return { status: 200, data: [{ campaignId: "11", adGroupId: "12", targetId: "13", state: "enabled", bid: 0.2 }] };
+        if (path.startsWith("/sd/productAds?")) {
+          expect(method).toBe("GET");
+          const q = new URL(path, "https://ads.test").searchParams, start = Number(q.get("startIndex"));
+          expect([q.get("count"), q.get("stateFilter")]).toEqual(["100", "enabled,paused,archived"]);
+          return { status: 200, data: productAds.slice(start, start + 100) };
+        }
+        if (path === "/product/metadata") {
+          expect(body.asins).toEqual(["B0PRODUCTA", "B0PRODUCTB"]);
+          return { status: 200, data: { ProductMetadataList: [{ asin: "B0PRODUCTA", title: "Pink Jump Rope", imageUrl: "https://m.media-amazon.com/images/I/a.jpg" }] } };
+        }
         return { status: 200, data: [] };
       },
       async createReport(profile, spec) { return `report-${spec.configuration.reportTypeId}-${spec.startDate}`; },
@@ -69,7 +82,10 @@ describe("targeting reports", () => {
     expect(summary.errors).toEqual([]);
     expect(listed).toContain("/sd/targets");
     const { rows, coverage } = await keywordInsight(db, { profileId, from: "2026-11-21", to: "2026-11-21", settings: { ...defaults(), filters: {} } });
-    expect(rows).toEqual([expect.objectContaining({ sponsored: "Display", campaign: "SD-BROAD-VIDEO", keyword: "audiences-likely-interested-in-ad", kind: "target", clicks: 3, spend: 1.1, currentBid: 0.2, state: "enabled", pl: -1.1 })]);
+    expect(rows).toEqual([expect.objectContaining({ sponsored: "Display", campaign: "SD-BROAD-VIDEO", keyword: "audiences-likely-interested-in-ad", kind: "target", clicks: 3, spend: 1.1, currentBid: 0.2, state: "enabled", pl: -1.1,
+      asin: "B0PRODUCTA", title: "Pink Jump Rope", image: "/api/ads/product-image?asin=B0PRODUCTA" })]);
+    expect(listed.filter(p => p === "/sd/productAds")).toHaveLength(2);
+    expect((await db.execute("SELECT COUNT(*) AS n FROM ads_sd_product_ads")).rows[0].n).toBe(101);
     expect(coverage.SD_TARGETING).toMatchObject({ days: 1, expectedDays: 1, pending: false });
     expect((await db.execute("SELECT COUNT(*) AS n FROM ads_daily")).rows[0].n).toBe(0);
   });
@@ -135,12 +151,13 @@ describe("Keywords with 0 Sales", () => {
     await store(db, "SP", [ad("one", "B0PRODUCTA"), ad("shared", "B0PRODUCTB"), ad("shared", "B0PRODUCTA"), ad("old", "B0PRODUCTC", "2026-10-01")], "2026-10-01", to);
     await store(db, "SP_TARGETING", [target("single", 50, { adGroupId: "one" }), target("bundle", 40, { adGroupId: "shared" }), target("old", 35, { adGroupId: "old" })]);
     await store(db, "SB_TARGETING", [target("brand", 30, { campaignId: "sb", adGroupId: "sbg" }), target("unmapped", 25, { campaignId: "sb", adGroupId: "new" })]);
-    await store(db, "SD_TARGETING", [target("display", 20, { kind: "target" })]);
+    await store(db, "SD_TARGETING", [target("display", 20, { kind: "target", campaignId: "sd", adGroupId: "sdg" }), target("unlisted", 20, { kind: "target", campaignId: "sd", adGroupId: "gone" })]);
     await db.batch([
       // The Sponsored Brands group's ads changed within the dates, so it names both sets.
       { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'sbg', 'B0PRODUCTB', '2026-10-01', '2026-11-10', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'sbg', 'B0PRODUCTA,B0PRODUCTB', '2026-11-11', '2026-11-26', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'new', 'B0PRODUCTC', '2026-09-01', '2026-10-27', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_sd_product_ads VALUES (?, 'ad1', 'sd', 'sdg', 'B0PRODUCTA', 'enabled', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_products VALUES (?, 'B0PRODUCTA', 'Weighted Jump Rope', 'https://m.media-amazon.com/images/I/a.jpg', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_products VALUES (?, 'B0PRODUCTB', 'Battle Rope', '', 'now')", args: [profileId] },
     ], "write");
@@ -155,7 +172,9 @@ describe("Keywords with 0 Sales", () => {
       ["brand", { asin: "B0PRODUCTA,B0PRODUCTB", title: a.title, image: a.image, products: [a, b] }],
       // Its history ends the day before the dates.
       ["unmapped", none],
-      ["display", none],
+      ["display", { ...a, products: [a] }],
+      // Its ad group has no product ads listed.
+      ["unlisted", none],
     ]);
   });
 

@@ -113,6 +113,18 @@ const SCHEMA = [
     updated_ms INTEGER,
     PRIMARY KEY (profile_id, ad_id)
   )`,
+  // Sponsored Display product ads as last listed: the ASIN each ad advertises, in its ad group. Its
+  // reports name no product, so its keywords and targets are matched to products through these.
+  `CREATE TABLE IF NOT EXISTS ads_sd_product_ads (
+    profile_id TEXT NOT NULL,
+    ad_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    ad_group_id TEXT NOT NULL,
+    asin TEXT NOT NULL,
+    state TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, ad_id)
+  )`,
   // Titles and image URLs of advertised products, from the Ads API product metadata lookup.
   `CREATE TABLE IF NOT EXISTS ads_products (
     profile_id TEXT NOT NULL,

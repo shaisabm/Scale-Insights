@@ -1,13 +1,26 @@
 import { createClient } from "@libsql/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { GET as productImage } from "../../api/ads/product-image.js";
-import { imageSource, refreshProducts } from "../../server/ads/products.js";
+import { imageSource, refreshProducts, refreshSdProductAds } from "../../server/ads/products.js";
 import { storeWindow } from "../../server/ads/sync.js";
 import { SESSION_COOKIE, createSessionToken } from "../../server/auth.js";
 import { getDb, migrate } from "../../server/db.js";
 
 const profileId = "test-profile";
 const product = (asin, extra = {}) => ({ asin, title: `Title ${asin}`, imageUrl: `https://m.media-amazon.com/images/I/${asin}.jpg`, sku: "x", ...extra });
+
+describe("refreshSdProductAds", () => {
+  it("replaces the stored product ads only once the whole list is read", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await db.execute({ sql: "INSERT INTO ads_sd_product_ads VALUES (?, 'old', '1', '2', 'B0AAAAAAAA', 'enabled', 't')", args: [profileId] });
+    const full = Array.from({ length: 100 }, (_, i) => ({ adId: i, campaignId: 1, adGroupId: 3, asin: "B0BBBBBBBB", state: "PAUSED" }));
+    const failing = vi.fn(async (method, path) => (path.includes("startIndex=0") ? { status: 200, data: full } : { status: 429 }));
+    await expect(refreshSdProductAds(db, { request: failing }, profileId)).rejects.toThrow("HTTP 429");
+    expect((await db.execute("SELECT ad_id FROM ads_sd_product_ads")).rows.map(r => r.ad_id)).toEqual(["old"]);
+    expect(await refreshSdProductAds(db, { request: async () => ({ status: 200, data: [{ adId: 5, campaignId: 1, adGroupId: 3, asin: "B0CCCCCCCC", state: "PAUSED" }] }) }, profileId)).toBe(1);
+    expect((await db.execute("SELECT ad_id, ad_group_id, asin, state FROM ads_sd_product_ads")).rows.map(r => ({ ...r }))).toEqual([{ ad_id: "5", ad_group_id: "3", asin: "B0CCCCCCCC", state: "paused" }]);
+  });
+});
 
 describe("refreshProducts", () => {
   it("stores titles and images for every ASIN the ads data mentions, with one read-only lookup", async () => {

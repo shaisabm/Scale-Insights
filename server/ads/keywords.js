@@ -39,7 +39,7 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
   // Rows per page: as asked, else the card's saved choice, else 7.
   const pageSize = asked ?? settings.pageSize ?? 7;
   await migrate(db);
-  const [raw, entities, synced, pending, refused, spProducts, sbProducts, productRows] = await db.batch([
+  const [raw, entities, synced, pending, refused, spProducts, sbProducts, sdProducts, productRows] = await db.batch([
     {
       // With exactly one MAX(), SQLite takes the other plain columns (names, text, kind, bid) from
       // the row it picks: the latest day in the range, so renamed campaigns show their new name.
@@ -62,9 +62,11 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
     { sql: `SELECT ad_product FROM ads_unsupported WHERE profile_id = ? AND ad_product IN (${inList})`, args: [profileId, ...TARGETING_PRODUCTS] },
     // The products each ad group advertised in these dates: Sponsored Products through the ads that
     // reported, Sponsored Brands through the history of what its ads listed. Sponsored Display
-    // reports have no product, so its keywords and targets show none.
+    // reports name no product and its ads list has no history, so its ad groups take the product
+    // ads they have now.
     { sql: "SELECT campaign_id, ad_group_id, asin FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND asin <> '' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id, asin", args: [profileId, from, to] },
     { sql: "SELECT campaign_id, ad_group_id, asins FROM ads_search_product_history WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND valid_from <= ? AND valid_to >= ?", args: [profileId, to, from] },
+    { sql: "SELECT campaign_id, ad_group_id, asin FROM ads_sd_product_ads WHERE profile_id = ?", args: [profileId] },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
   ], "read");
   const advertised = new Map();
@@ -76,6 +78,7 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
   };
   for (const r of spProducts.rows) advertise("SP_TARGETING", r, [String(r.asin)]);
   for (const r of sbProducts.rows) advertise("SB_TARGETING", r, String(r.asins).split(","));
+  for (const r of sdProducts.rows) advertise("SD_TARGETING", r, [String(r.asin)]);
   const products = new Map(productRows.rows.map(r => [String(r.asin), r]));
   const key = (product, campaignId, adGroupId, id) => JSON.stringify([product, String(campaignId), String(adGroupId), String(id)]);
   const current = new Map(entities.rows.map(r => [key(r.ad_product, r.campaign_id, r.ad_group_id, r.keyword_id), r]));

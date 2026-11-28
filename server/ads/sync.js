@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { migrate } from "../db.js";
 import { addDays, todayIn } from "../http.js";
-import { refreshProducts } from "./products.js";
+import { refreshProducts, refreshSdProductAds } from "./products.js";
 import { refreshKeywordStates } from "./keyword-states.js";
 
 // Sponsored Products per advertised ASIN (7-day attribution); Sponsored Brands and Sponsored
@@ -419,6 +419,11 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   if (products.some(p => SEARCH_PRODUCTS.includes(p) || TARGETING_PRODUCTS.includes(p)) && typeof ads.request === "function") {
     summary.errors.push(...await refreshKeywordStates(db, ads, profileId, { now, products }));
   }
+  // Sponsored Display keywords and targets show the products their ad group advertises.
+  if (products.includes("SD_TARGETING") && typeof ads.request === "function") {
+    try { await refreshSdProductAds(db, ads, profileId, { now }); }
+    catch (err) { summary.errors.push(`SD product ads: ${err.message}`); }
+  }
 
   const lastDate = addDays(todayIn(timeZone, now()), -1);
   const pending = await pendingRequests();
@@ -471,8 +476,8 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   }
   summary.pending = (await pendingRequests()).length;
 
-  // The search term insight shows each product's title and image.
-  if (products.some(p => SEARCH_PRODUCTS.includes(p)) && typeof ads.request === "function") {
+  // The search term and keyword insights show each product's title and image.
+  if (products.some(p => SEARCH_PRODUCTS.includes(p) || p === "SD_TARGETING") && typeof ads.request === "function") {
     try { await refreshProducts(db, ads, profileId, iso()); }
     catch (err) { summary.errors.push(`Product details: ${err.message}`); }
   }

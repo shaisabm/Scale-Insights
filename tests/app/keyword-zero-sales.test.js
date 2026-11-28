@@ -31,10 +31,8 @@ describe("Keywords with 0 Sales card", () => {
     await vi.waitFor(() => expect(card()?.querySelector("table.grid")).toBeTruthy());
     expect(card().querySelector("h3").textContent).toBe("Keywords with 0 Sales");
     expect(labels()).toEqual(["Product", "Campaign", "Ad group", "Keyword", "Clicks", "Current bid", "CPC", "P&L"]);
-    // Each sample keyword shows its product's thumbnail, except Sponsored Display, which names none.
-    expect(bodyRows()[0].children[0].querySelector(".thumb")).not.toBeNull();
-    const display = bodyRows().find(tr => tr.textContent.includes("audiences-likely-interested-in-ad"));
-    expect(display.children[0].querySelector(".zero-product")).not.toBeNull();
+    // Each sample keyword or target shows its product's thumbnail, Sponsored Display's too.
+    expect(bodyRows().every(tr => tr.children[0].querySelector(".thumb"))).toBe(true);
     // Eight of the sample keywords pass the defaults: the auto target, the one that sold and the one
     // that spent under $20 don't.
     expect(bodyRows()).toHaveLength(7);

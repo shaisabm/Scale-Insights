@@ -141,9 +141,9 @@
     ["Products", `SP-EXACT-RANK - ${P[0].asin}`, "Exact", "jump rope for women", "keyword", "exact", "enabled", 4000, 40, 38.2, 74.97, 3, 1.14],
     ["Products", `SP-PHRASE-DISCOVERY - ${P[1].asin}`, "Phrase", "cordless battle ropes", "keyword", "phrase", "enabled", 900, 9, 8.1, 0, 0, 0.95],
   ];
-  // The product is the one the campaign names, else one of the two; Display has none, as in its reports.
+  // The product is the one the campaign names, else one of the two.
   const keywordRow = ([sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, spend, sales, orders, currentBid], i) => ({
-    p: sponsored === "Display" ? null : P.slice(0, 2).find(p => campaign.includes(p.asin)) || P[i % 2],
+    p: P.slice(0, 2).find(p => campaign.includes(p.asin)) || P[i % 2],
     sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100,
     conversion: (orders / clicks) * 100, acos: sales ? (spend / sales) * 100 : null, roas: sales / spend, topShare: sponsored === "Display" ? null : (clicks / impressions) * 1000,
     pl: orders ? null : -spend, breakEvenBid: null, currentBid,
