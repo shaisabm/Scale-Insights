@@ -315,6 +315,14 @@
         // What the account last accepted, which a refused dialog save falls back to.
         c.accepted = c.settings;
       }
+      // One sync at a time, for every card. The server answers only once it's done (up to about a
+      // minute), so meanwhile each card's Sync now counts the seconds, then the result is shown.
+      let syncing = null;
+      const paintSync = () => {
+        if (!syncing) return;
+        const seconds = Math.floor((Date.now() - syncing.started) / 1000);
+        $$("[data-zero-sync]", root).forEach(b => { b.disabled = true; b.textContent = `Syncing with Amazon Ads… ${seconds}s`; });
+      };
       // Settings can change the columns, so the whole card is redrawn.
       const update = (c, next) => {
         c.current = next;
@@ -327,6 +335,7 @@
         $(".icard-body", c.el).innerHTML = c.body(next, c.settings, c.grid);
         const size = $("[data-zero-size]", c.el);
         if (size) { size.value = String(next.pageSize || 7); if (onSize) size.focus(); }
+        paintSync();
       };
       // Settings are saved whole, so saves run one at a time: each starts once the one before has
       // finished and sends the settings as they are then, so it carries every change made before it
@@ -365,6 +374,17 @@
           SP.toast(err.message);
         });
       };
+      const sync = async () => {
+        if (syncing) return;
+        syncing = { started: Date.now(), timer: setInterval(paintSync, 1000) };
+        paintSync();
+        try { SP.toast(syncMessage(await SP.api.post("/api/sync/ads"))); }
+        catch (err) { SP.toast(err.message); }
+        clearInterval(syncing.timer);
+        syncing = null;
+        $$("[data-zero-sync]", root).forEach(b => { b.disabled = false; b.textContent = "Sync now"; });
+        Object.values(cards).forEach(x => fetchPage(x, x.page));
+      };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");
         if (ed && cards[ed.dataset.edit]) {
@@ -392,13 +412,13 @@
           });
           $("[data-z=sort]", dialog).value = `${c.settings.sort}:${c.settings.dir}`;
         }
-        // The pager and sync button act on the card they sit in.
+        // The pager acts on the card it sits in; a sync, on every card.
         const host = e.target.closest(cardSel);
         const c = host && Object.values(cards).find(x => host.matches(x.sel));
         if (c) {
           if (e.target.closest("[data-zero-next]")) fetchPage(c, c.page + 1);
           if (e.target.closest("[data-zero-prev]")) fetchPage(c, Math.max(0, c.page - 1));
-          if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(() => fetchPage(c, c.page)).catch(err => SP.toast(err.message));
+          if (e.target.closest("[data-zero-sync]")) sync();
         }
         if (e.target.closest("[data-apply]")) Object.values(cards).forEach(x => fetchPage(x, 0));
       });

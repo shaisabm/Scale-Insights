@@ -136,6 +136,42 @@ describe("Keywords with 0 Sales card", () => {
     expect(display.querySelector(".zero-product")).not.toBeNull();
   });
 
+  it("shows a sync's progress on every card's Sync now, then what it did, and reloads the cards", async () => {
+    stubNavigation();
+    let finish;
+    const unsynced = { ...keywordPage([keyword("weighted battle ropes", 46, 45.77, 1.13)]), coverage: { SP_TARGETING: { days: 12, expectedDays: 30 } } };
+    const api = stubFetch({
+      "GET /api/ads/zero-sales": searchPage, "GET /api/ads/high-acos": searchPage, "GET /api/ads/performing": searchPage,
+      "GET /api/ads/keywords": unsynced,
+      "POST /api/sync/ads": () => new Promise(resolve => { finish = resolve; }),
+    });
+    openApp("/Ads", { realData: true });
+    await vi.waitFor(() => expect(card()?.querySelector("[data-zero-sync]")).toBeTruthy());
+    expect(card().querySelector("[data-zero-status]").textContent).toContain("Keyword reports are not fully synced.");
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    const buttons = () => [...document.querySelectorAll("[data-zero-sync]")];
+    const keywordLoads = () => api.mock.calls.filter(([url]) => String(url).startsWith("/api/ads/keywords")).length;
+    const loadsBefore = keywordLoads();
+    try {
+      card().querySelector("[data-zero-sync]").click();
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+      expect(buttons().length).toBeGreaterThan(1);
+      expect(buttons().map(b => [b.disabled, b.textContent])).toEqual(buttons().map(() => [true, "Syncing with Amazon Ads… 0s"]));
+      // The count goes on every second; a second click doesn't start another sync.
+      clock.mockReturnValue(now + 12_000);
+      await vi.waitFor(() => expect(card().querySelector("[data-zero-sync]").textContent).toBe("Syncing with Amazon Ads… 12s"), { timeout: 3000 });
+      card().querySelector("[data-zero-sync]").click();
+      expect(api.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+      finish({ requested: 0, stored: 3, failed: 0, pending: 1, rows: 40, errors: [] });
+      await vi.waitFor(() => expect(document.querySelector("#toast").textContent).toBe("Amazon is still preparing some reports. Check back in a few minutes."));
+      await vi.waitFor(() => expect(keywordLoads()).toBeGreaterThan(loadsBefore));
+      await vi.waitFor(() => expect(buttons().every(b => !b.disabled && b.textContent === "Sync now")).toBe(true));
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("says why it couldn't load, while the search term cards still show", async () => {
     stubNavigation();
     stubFetch({
