@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client";
 import { describe, expect, it, vi } from "vitest";
 import { GET } from "../../api/ads/search-terms.js";
 import { PUT as saveRoute } from "../../api/ads/[settings].js";
-import { MISSING_TITLE_DEFAULTS, cleanInsightSettings } from "../../server/ads/insight-settings.js";
+import { MISSING_TITLE_DEFAULTS, UNIQUE_WORD_ZERO_DEFAULTS, cleanInsightSettings } from "../../server/ads/insight-settings.js";
 import { normalizeRows, storeWindow } from "../../server/ads/sync.js";
 import { ALL_WORDS, mainWords, wordInsight, wordsOf } from "../../server/ads/words.js";
 import { SESSION_COOKIE, createSessionToken } from "../../server/auth.js";
@@ -129,6 +129,7 @@ describe("/api/ads/search-terms words views", () => {
         expect((await get(query)).status).toBe(400);
       }
       expect(await (await get("view=word-insight&filterId=missing-title-words&page=0&pageSize=10")).json()).toMatchObject({ filterId: "missing-title-words", page: 0, pageSize: 10, total: 0, rows: [], settings: MISSING_TITLE_DEFAULTS });
+      expect(await (await get("view=word-insight&filterId=unique-word-zero-sales&page=0&pageSize=10")).json()).toMatchObject({ filterId: "unique-word-zero-sales", page: 0, pageSize: 10, total: 0, rows: [], settings: UNIQUE_WORD_ZERO_DEFAULTS });
       expect(await (await get("view=words")).json()).toMatchObject({ filterId: "", products: [], settings: ALL_WORDS });
       const saved = await saveRoute(new Request("https://app.test/api/ads/missing-title-words-settings", {
         method: "PUT", body: JSON.stringify({ ...structuredClone(MISSING_TITLE_DEFAULTS), filters: { orders: { min: 5 } } }), headers: { "Content-Type": "application/json", cookie: `${SESSION_COOKIE}=${createSessionToken("secret")}` },

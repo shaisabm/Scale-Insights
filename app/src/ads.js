@@ -57,14 +57,19 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords", kwa: "high-acos-keywords", mw: "missing-title-words" };
+  // Extra zero-sale search terms for word insights in sample data only.
+  const WORD_ZERO_TERMS = [
+    ["jump ropes for women", 8140, 42, -35.07], ["battle rope with counter", 5950, 29, -31.2], ["cordless jump rope with counter", 9200, 36, -40.1],
+  ];
+  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords", kwa: "high-acos-keywords", mw: "missing-title-words", uw: "unique-word-zero-sales" };
+  const WORD_INSIGHT_CARDS = new Set(["mw", "uw"]);
   // Search term cards open the Search terms report, keyword cards the Performance report's Keywords
   // tab and word cards the Main words report, filtered by the card and for its dates.
   const insightLink = (id, range = {}) => {
     const initial = SP.rangeFor("Last 30 Days");
-    return `${id.startsWith("kw") ? "/Ads/Performance/Keywords" : id === "mw" ? "/Ads/MainKeywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
+    return `${id.startsWith("kw") ? "/Ads/Performance/Keywords" : WORD_INSIGHT_CARDS.has(id) ? "/Ads/MainKeywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
   };
-  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card", kwa: "data-kwa-card", mw: "data-words-card" };
+  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card", kwa: "data-kwa-card", mw: "data-words-card", uw: "data-uw-card" };
   const card = (title, body, tip, id, range) => `<section class="icard" ${CARD_ATTRS[id]}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${insightLink(id, range)}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
@@ -102,6 +107,8 @@
   // Words with 3 or more orders and 8% conversion or more that the product's title doesn't have, most orders first.
   const MISSING_TITLE_DEFAULTS = { name: "Missing good Word In Title", description: "[Tip]: Consider adding relevant keyword with high traffic and conversion to your product title for boosting their organic ranking.", showTracked: true, hideAsins: true, hideInTitle: true, sort: "orders", dir: "desc", filters: { orders: { min: 3 }, conversion: { min: 8 } }, track: ["clicks", "orders", "conversion"], order: [], pageSize: 7 };
   const missingTitleDefaults = () => JSON.parse(JSON.stringify(MISSING_TITLE_DEFAULTS));
+  const UNIQUE_WORD_ZERO_DEFAULTS = { name: "Unique Word with 0 Sales", description: "[Tip]: You can save advertising cost by automatically reducing bids on words with no sales using Automation.", showTracked: true, hideAsins: true, hideInTitle: false, sort: "clicks", dir: "desc", filters: { clicks: { min: 25 }, orders: { max: 0 } }, track: ["impressions", "clicks", "spend"], order: [], pageSize: 7 };
+  const uniqueWordZeroDefaults = () => JSON.parse(JSON.stringify(UNIQUE_WORD_ZERO_DEFAULTS));
   // Keywords and targets that spent $20 or more without an order, costliest first, with the current
   // bid next to the clicks.
   const KEYWORD_ZERO_DEFAULTS = { name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true, hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false, sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7 };
@@ -309,30 +316,32 @@
   SP.pages["/Ads"] = {
     title: "Insights overview",
     load: () => {
-      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords(), kwa: sampleKeywordAcos(), mw: sampleWords() });
+      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords(), kwa: sampleKeywordAcos(), mw: sampleWords(), uw: sampleUniqueWords() });
       const r = SP.rangeFor("Last 30 Days"), q = new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" });
       // The keyword and word cards load on their own, so if one fails the other cards still show.
       const keywords = filterId => SP.api.get(`/api/ads/keywords?filterId=${filterId}&${q}`).catch(err => ({ error: err.message }));
-      const words = SP.api.get(`/api/ads/search-terms?view=word-insight&filterId=missing-title-words&${q}`).catch(err => ({ error: err.message }));
-      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords("zero-sales-keywords"), keywords("high-acos-keywords"), words])
-        .then(([st0, acos, perf, kw0, kwa, mw]) => ({ st0, acos, perf, kw0, kwa, mw }));
+      const words = filterId => SP.api.get(`/api/ads/search-terms?view=word-insight&filterId=${filterId}&${q}`).catch(err => ({ error: err.message }));
+      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords("zero-sales-keywords"), keywords("high-acos-keywords"), words("missing-title-words"), words("unique-word-zero-sales")])
+        .then(([st0, acos, perf, kw0, kwa, mw, uw]) => ({ st0, acos, perf, kw0, kwa, mw, uw }));
     },
     render(data) {
       const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults(), ks = data.kw0.settings || keywordDefaults();
-      const ka = data.kwa.settings || keywordAcosDefaults(), ws = data.mw.settings || missingTitleDefaults();
+      const ka = data.kwa.settings || keywordAcosDefaults(), ws = data.mw.settings || missingTitleDefaults(), us = data.uw.settings || uniqueWordZeroDefaults();
       const c1 = zeroBody(data.st0, zs, "i1");
       const c2 = zeroBody(data.acos, as, "i2");
       const c3 = zeroBody(data.perf, ps, "i3");
       const c4 = keywordBody(data.kw0, ks, "i4");
       const c5 = keywordBody(data.kwa, ka, "i5");
       const c6 = wordBody(data.mw, ws, "i6");
+      const c7 = wordBody(data.uw, us, "i7");
       const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
         ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0", data.st0)}
         ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos", data.acos)}
         ${card(SP.esc(ps.name), c3, SP.esc(ps.description), "perf", data.perf)}
         ${card(SP.esc(ks.name), c4, SP.esc(ks.description), "kw0", data.kw0)}
         ${card(SP.esc(ka.name), c5, SP.esc(ka.description), "kwa", data.kwa)}
-        ${card(SP.esc(ws.name), c6, SP.esc(ws.description), "mw", data.mw)}`;
+        ${card(SP.esc(ws.name), c6, SP.esc(ws.description), "mw", data.mw)}
+        ${card(SP.esc(us.name), c7, SP.esc(us.description), "uw", data.uw)}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
@@ -351,6 +360,7 @@
         kw0: { key: "kw0", sel: "[data-kw-card]", grid: "i4", api: "/api/ads/keywords", params: { filterId: "zero-sales-keywords" }, saveApi: "/api/ads/zero-sales-keywords-settings", defaults: keywordDefaults, sample: sampleKeywords, body: keywordBody, spec: KEYWORD_SPEC },
         kwa: { key: "kwa", sel: "[data-kwa-card]", grid: "i5", api: "/api/ads/keywords", params: { filterId: "high-acos-keywords" }, saveApi: "/api/ads/high-acos-keywords-settings", defaults: keywordAcosDefaults, sample: sampleKeywordAcos, body: keywordBody, spec: KEYWORD_SPEC },
         mw: { key: "mw", sel: "[data-words-card]", grid: "i6", api: "/api/ads/search-terms", params: { view: "word-insight", filterId: "missing-title-words" }, saveApi: "/api/ads/missing-title-words-settings", defaults: missingTitleDefaults, sample: sampleWords, body: wordBody, spec: WORD_SPEC },
+        uw: { key: "uw", sel: "[data-uw-card]", grid: "i7", api: "/api/ads/search-terms", params: { view: "word-insight", filterId: "unique-word-zero-sales" }, saveApi: "/api/ads/unique-word-zero-sales-settings", defaults: uniqueWordZeroDefaults, sample: sampleUniqueWords, body: wordBody, spec: WORD_SPEC },
       };
       const cardSel = Object.values(cards).map(c => c.sel).join(",");
       for (const c of Object.values(cards)) {
@@ -754,7 +764,8 @@
   // Sample words come from the sample search terms, per product set and ad type.
   const sampleWordRows = query => {
     const words = new Map();
-    for (const r of sampleSearch({ ...query, filterId: "" }).rows) for (const word of termWords(r.term)) {
+    const extra = WORD_ZERO_TERMS.map(zeroRow).map((r, i) => ({ ...r, sponsored: "Products", p: P[i % 2], asin: P[i % 2].asin, title: P[i % 2].title, image: null, products: [P[i % 2]] }));
+    for (const r of [...sampleSearch({ ...query, filterId: "" }).rows, ...extra]) for (const word of termWords(r.term)) {
       const key = JSON.stringify([r.asin, r.sponsored, word]);
       const w = words.get(key) || { asin: r.asin, sponsored: r.sponsored, title: r.title, image: null, products: r.products, p: P.find(p => p.asin === r.asin) || null, word, searchTerms: [] };
       w.searchTerms.push({ ...r, lastSeen: query.to });
@@ -767,8 +778,16 @@
     const r = SP.rangeFor("Last 30 Days");
     return sampleInsight(sampleWordRows({ from: SP.iso(r.from), to: SP.iso(r.to) }), settings, page, wordHidden(settings));
   };
-  const wordFilters = { "": "No filter", "missing-title-words": "Missing good Word In Title" };
-  const wordSettings = id => (id === "missing-title-words" ? missingTitleDefaults() : { name: "All words", filters: {}, hideAsins: false, hideInTitle: false, sort: "clicks", dir: "desc" });
+  const sampleUniqueWords = (settings = uniqueWordZeroDefaults(), page = 0) => {
+    const r = SP.rangeFor("Last 30 Days");
+    return sampleInsight(sampleWordRows({ from: SP.iso(r.from), to: SP.iso(r.to) }), settings, page, wordHidden(settings));
+  };
+  const wordFilters = { "": "No filter", "missing-title-words": "Missing good Word In Title", "unique-word-zero-sales": "Unique Word with 0 Sales" };
+  const wordSettings = id => {
+    if (id === "missing-title-words") return missingTitleDefaults();
+    if (id === "unique-word-zero-sales") return uniqueWordZeroDefaults();
+    return { name: "All words", filters: {}, hideAsins: false, hideInTitle: false, sort: "clicks", dir: "desc" };
+  };
   // The words the filter keeps, grouped by product set, as the API's view=words gives them.
   const sampleMainWords = query => {
     const settings = wordSettings(query.filterId), rows = sampleWordRows(query), products = new Map();
@@ -826,6 +845,10 @@
       let query = { from: initial.from, to: initial.to, filterId: initial.filterId || "" }, current = initial, latest = 0, selected = "";
       const range = $("[data-range]", root), error = $("[data-words-error]", root);
       showRange(range, query.from, query.to);
+      const urlFilter = new URLSearchParams(location.search).get("filterId") || "";
+      const reload = Object.hasOwn(wordFilters, urlFilter) && urlFilter !== (initial.filterId || "");
+      if (Object.hasOwn(wordFilters, urlFilter)) query.filterId = urlFilter;
+      $("[data-words-filter]", root).value = query.filterId;
       const update = async () => {
         const request = ++latest;
         query = { ...query, filterId: $("[data-words-filter]", root).value };
@@ -853,6 +876,7 @@
         if (e.target.closest("[data-apply]")) update();
         if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(summary => { SP.toast(syncMessage(summary)); return update(); }).catch(err => { error.textContent = err.message; error.hidden = false; });
       });
+      if (reload) update();
     },
   };
 

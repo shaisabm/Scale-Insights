@@ -1,7 +1,7 @@
 import { migrate } from "../db.js";
 
 // Settings for the insight cards ("Search Terms with 0 Sales", "Search Terms with High ACOS",
-// "Keywords with 0 Sales", "Keywords with High ACOS", "Missing good Word In Title"): their name and tip, which search terms or keywords they list, how
+// "Keywords with 0 Sales", "Keywords with High ACOS", "Missing good Word In Title", "Unique Word with 0 Sales"): their name and tip, which search terms or keywords they list, how
 // they're sorted, and which metric columns they show. Saved per profile and per card.
 export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "roas", "spend", "sales", "pl", "breakEvenBid"];
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
@@ -130,10 +130,25 @@ export const MISSING_TITLE_DEFAULTS = Object.freeze({
   pageSize: 7,
 });
 
+// Words with 25 or more clicks and no orders, most clicks first, leaving out ASINs.
+export const UNIQUE_WORD_ZERO_DEFAULTS = Object.freeze({
+  name: "Unique Word with 0 Sales",
+  description: "[Tip]: You can save advertising cost by automatically reducing bids on words with no sales using Automation.",
+  showTracked: true,
+  hideAsins: true,
+  hideInTitle: false,
+  sort: "clicks",
+  dir: "desc",
+  filters: { clicks: { min: 25 }, orders: { max: 0 } },
+  track: ["impressions", "clicks", "spend"],
+  order: [],
+  pageSize: 7,
+});
+
 // Each card starts from its own defaults until its settings are saved.
 export const SEARCH_INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS, performing: PERFORMING_DEFAULTS };
 export const KEYWORD_INSIGHT_DEFAULTS = { "zero-sales-keywords": KEYWORD_ZERO_DEFAULTS, "high-acos-keywords": KEYWORD_HIGH_ACOS_DEFAULTS };
-export const WORD_INSIGHT_DEFAULTS = { "missing-title-words": MISSING_TITLE_DEFAULTS };
+export const WORD_INSIGHT_DEFAULTS = { "missing-title-words": MISSING_TITLE_DEFAULTS, "unique-word-zero-sales": UNIQUE_WORD_ZERO_DEFAULTS };
 export const INSIGHT_DEFAULTS = { ...SEARCH_INSIGHT_DEFAULTS, ...KEYWORD_INSIGHT_DEFAULTS, ...WORD_INSIGHT_DEFAULTS };
 
 // What a card's settings may name: search term, keyword and word cards differ in metrics, columns
