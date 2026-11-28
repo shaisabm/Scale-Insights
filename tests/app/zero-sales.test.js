@@ -416,6 +416,46 @@ describe("Search Terms with 0 Sales card", () => {
     await vi.waitFor(() => expect(showing()).toBe("1–20 of 30"));
   });
 
+  it("pages from the first page at a new rows per page whose page failed to load", async () => {
+    stubNavigation();
+    const many = Array.from({ length: 30 }, (_, i) => ({ ...terms[i % terms.length], term: `search term ${i + 1}` }));
+    const asked = [];
+    let failing = null;
+    vi.stubGlobal("fetch", vi.fn(async (url, init = {}) => {
+      if (init.method === "PUT") return json({ settings: JSON.parse(init.body) });
+      const params = new URL(url, location.origin).searchParams, page = Number(params.get("page")), size = Number(params.get("pageSize") || 7);
+      asked.push([page, size]);
+      if (failing) return new Response(JSON.stringify({ error: failing }), { status: 500, headers: { "Content-Type": "application/json" } });
+      const at = Math.max(0, Math.min(page, Math.ceil(many.length / size) - 1));
+      return json({ ...response(0), page: at, pageSize: size, total: many.length, rows: many.slice(at * size, (at + 1) * size) });
+    }));
+    openApp("/Ads");
+    await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
+    const pager = () => document.querySelector("[data-zero-card] [data-zero-pager]");
+    const showing = () => pager().querySelector(".zero-showing").textContent;
+    const next = async expected => { pager().querySelector("[data-zero-next]").click(); await vi.waitFor(() => expect(asked.at(-1)).toEqual(expected)); };
+    await next([1, 7]);
+    await next([2, 7]);
+    await vi.waitFor(() => expect(showing()).toBe("15–21 of 30"));
+    // The 10 rows per page is saved, but its first page fails, leaving page 3 at 7 rows on screen.
+    failing = "Search terms are unavailable.";
+    const size = pager().querySelector("[data-zero-size]");
+    size.value = "10";
+    size.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(asked.at(-1)).toEqual([0, 10]));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Search terms are unavailable."));
+    failing = null;
+    await next([1, 10]);
+    await vi.waitFor(() => expect(showing()).toBe("11–20 of 30"));
+    // A failed page at the same size still pages on from the page on screen.
+    failing = "Search terms are still unavailable.";
+    await next([2, 10]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Search terms are still unavailable."));
+    failing = null;
+    await next([2, 10]);
+    await vi.waitFor(() => expect(showing()).toBe("21–30 of 30"));
+  });
+
   it("starts over at a rows per page saved elsewhere, so the pager and its requests agree", async () => {
     stubNavigation();
     const asked = [];

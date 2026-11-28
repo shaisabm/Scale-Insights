@@ -295,7 +295,13 @@
           // the pager and the pages it asks for agree.
           if (next.settings && (next.settings.pageSize || 7) !== size) { c.settings = next.settings; return fetchPage(c, 0); }
           update(c, next);
-        }, err => { if (id === c.latest) { c.page = c.current.page; SP.toast(err.message); } });
+        }, err => {
+          if (id !== c.latest) return;
+          // Paging goes on from the page on screen, unless this asked for another rows per page: the
+          // page on screen means nothing at that size, so then it goes on from the first page.
+          c.page = size === (c.current.pageSize || 7) ? c.current.page : 0;
+          SP.toast(err.message);
+        });
       };
       root.addEventListener("click", e => {
         const ed = e.target.closest("[data-edit]");
