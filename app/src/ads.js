@@ -182,9 +182,11 @@
       });
     const size = settings.pageSize || 7, rowsPage = all.slice(page * size, (page + 1) * size), sum = k => rowsPage.reduce((n, r) => n + r[k], 0);
     const spend = sum("spend"), clicks = sum("clicks"), impressions = sum("impressions"), orders = sum("orders"), sales = sum("sales");
+    // As the API does, P&L adds up the rows that have one, and stays unknown when none on the page do.
+    const known = rowsPage.filter(r => r.pl != null);
     return {
       page, pageSize: size, total: all.length, rows: rowsPage, settings,
-      totals: { impressions, clicks, orders, units: sum("units"), spend, sales, cpc: clicks ? spend / clicks : null, ctr: impressions ? (clicks / impressions) * 100 : null, conversion: clicks ? (orders / clicks) * 100 : null, acos: sales ? (spend / sales) * 100 : null, roas: spend ? sales / spend : null, pl: sum("pl"), breakEvenBid: null },
+      totals: { impressions, clicks, orders, units: sum("units"), spend, sales, cpc: clicks ? spend / clicks : null, ctr: impressions ? (clicks / impressions) * 100 : null, conversion: clicks ? (orders / clicks) * 100 : null, acos: sales ? (spend / sales) * 100 : null, roas: spend ? sales / spend : null, pl: known.length ? known.reduce((n, r) => n + r.pl, 0) : null, breakEvenBid: null },
       coverage: { SP_SEARCH: { days: 30, expectedDays: 30 }, SB_SEARCH: { days: 30, expectedDays: 30 } },
     };
   }

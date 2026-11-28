@@ -40,6 +40,9 @@ describe("Keywords with High ACOS card", () => {
     const first = bodyRows()[0].textContent;
     for (const value of ["41", "2.44%", "$42.88", "$0.95", "$1.05", "204.29%"]) expect(first).toContain(value);
     for (const gone of ["loose-match", "weighted jump rope"]) expect(card().textContent).not.toContain(gone);
+    // Every row sold, so no P&L is known and the totals row leaves it blank.
+    const totals = card().querySelector(".sumrow").children;
+    expect(totals[labels().indexOf("P&L")].textContent.trim()).toBe("");
     card().querySelector("[data-zero-next]").click();
     await vi.waitFor(() => expect(bodyRows()[0].textContent).toContain("workout equipment for women"));
     expect(fetch).not.toHaveBeenCalled();
