@@ -142,7 +142,7 @@ describe("Keywords with 0 Sales card", () => {
     const unsynced = { ...keywordPage([keyword("weighted battle ropes", 46, 45.77, 1.13)]), coverage: { SP_TARGETING: { days: 12, expectedDays: 30 } } };
     const api = stubFetch({
       "GET /api/ads/zero-sales": searchPage, "GET /api/ads/high-acos": searchPage, "GET /api/ads/performing": searchPage,
-      "GET /api/ads/keywords": unsynced,
+      "GET /api/ads/keywords": unsynced, "GET /api/ads/search-terms": searchPage,
       "POST /api/sync/ads": () => new Promise(resolve => { finish = resolve; }),
     });
     openApp("/Ads", { realData: true });

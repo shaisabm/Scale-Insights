@@ -1,7 +1,7 @@
 import { migrate } from "../db.js";
 
 // Settings for the insight cards ("Search Terms with 0 Sales", "Search Terms with High ACOS",
-// "Keywords with 0 Sales", "Keywords with High ACOS"): their name and tip, which search terms or keywords they list, how
+// "Keywords with 0 Sales", "Keywords with High ACOS", "Missing good Word In Title"): their name and tip, which search terms or keywords they list, how
 // they're sorted, and which metric columns they show. Saved per profile and per card.
 export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "roas", "spend", "sales", "pl", "breakEvenBid"];
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
@@ -108,16 +108,41 @@ export const KEYWORD_HIGH_ACOS_DEFAULTS = Object.freeze({
   order: ["p", "campaign", "adGroup", "keyword", "clicks", "units", "conversion", "spend", "currentBid", "cpc", "acos", "pl"],
 });
 
+// The word insight cards ("Missing good Word In Title") list the words of search terms, per product
+// and ad type. Their metrics leave out P&L and break even bid.
+export const WORD_METRICS = ZERO_METRICS.filter(k => !["pl", "breakEvenBid"].includes(k));
+// The card's column keys (product, ad type, word, then metrics).
+export const WORD_COLUMNS = ["p", "sp", "word", ...WORD_METRICS];
+
+// Words with 3 or more orders and 8% conversion or more that the product's title doesn't have, most
+// orders first, leaving out ASINs.
+export const MISSING_TITLE_DEFAULTS = Object.freeze({
+  name: "Missing good Word In Title",
+  description: "[Tip]: Consider adding relevant keyword with high traffic and conversion to your product title for boosting their organic ranking.",
+  showTracked: true,
+  hideAsins: true,
+  hideInTitle: true,
+  sort: "orders",
+  dir: "desc",
+  filters: { orders: { min: 3 }, conversion: { min: 8 } },
+  track: ["clicks", "orders", "conversion"],
+  order: [],
+  pageSize: 7,
+});
+
 // Each card starts from its own defaults until its settings are saved.
 export const SEARCH_INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS, performing: PERFORMING_DEFAULTS };
 export const KEYWORD_INSIGHT_DEFAULTS = { "zero-sales-keywords": KEYWORD_ZERO_DEFAULTS, "high-acos-keywords": KEYWORD_HIGH_ACOS_DEFAULTS };
-export const INSIGHT_DEFAULTS = { ...SEARCH_INSIGHT_DEFAULTS, ...KEYWORD_INSIGHT_DEFAULTS };
+export const WORD_INSIGHT_DEFAULTS = { "missing-title-words": MISSING_TITLE_DEFAULTS };
+export const INSIGHT_DEFAULTS = { ...SEARCH_INSIGHT_DEFAULTS, ...KEYWORD_INSIGHT_DEFAULTS, ...WORD_INSIGHT_DEFAULTS };
 
-// What a card's settings may name: search term cards and keyword cards differ in metrics, columns
+// What a card's settings may name: search term, keyword and word cards differ in metrics, columns
 // and what they can hide.
 const SEARCH_SPEC = { metrics: ZERO_METRICS, columns: ZERO_COLUMNS, hides: ["hideAsins", "hideKeywords"] };
 const KEYWORD_SPEC = { metrics: KEYWORD_METRICS, columns: KEYWORD_COLUMNS, hides: KEYWORD_HIDES };
-const specOf = defaults => (Object.values(KEYWORD_INSIGHT_DEFAULTS).includes(defaults) ? KEYWORD_SPEC : SEARCH_SPEC);
+const WORD_SPEC = { metrics: WORD_METRICS, columns: WORD_COLUMNS, hides: ["hideAsins", "hideInTitle"] };
+const specOf = defaults => (Object.values(KEYWORD_INSIGHT_DEFAULTS).includes(defaults) ? KEYWORD_SPEC
+  : Object.values(WORD_INSIGHT_DEFAULTS).includes(defaults) ? WORD_SPEC : SEARCH_SPEC);
 
 /**
  * { settings } with everything checked and normalized, or { error } for the first problem.
