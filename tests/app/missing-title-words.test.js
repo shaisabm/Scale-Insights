@@ -159,7 +159,7 @@ describe("Main words report", () => {
     await vi.waitFor(() => expect(document.querySelector("[data-words-status] [data-zero-sync]")).not.toBeNull());
     document.querySelector("[data-zero-sync]").click();
     await vi.waitFor(() => expect(document.querySelector("#toast")?.textContent).toBe("Sync finished with problems: SB_SEARCH: HTTP 429. Some reports are still being prepared."));
-    await vi.waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).startsWith("/api/ads/search-terms"))).toHaveLength(2));
+    await vi.waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).startsWith("/api/ads/search-terms"))).toHaveLength(3));
   });
 
   it("loads the words view of the search terms, and reloads for another filter", async () => {
@@ -186,8 +186,8 @@ describe("Main words report", () => {
     const select = document.querySelector("[data-words-filter]");
     select.value = "";
     select.dispatchEvent(new Event("change", { bubbles: true }));
-    await vi.waitFor(() => expect(api.mock.calls).toHaveLength(2));
-    expect(new URL(String(api.mock.calls[1][0]), location.origin).searchParams.get("filterId")).toBe("");
+    await vi.waitFor(() => expect(api.mock.calls).toHaveLength(3));
+    expect(new URL(String(api.mock.calls[2][0]), location.origin).searchParams.get("filterId")).toBe("");
     await vi.waitFor(() => expect(location.search).toContain("filterId="));
   });
 });
