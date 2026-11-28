@@ -777,12 +777,13 @@
   const activity = v => (v ? SP.dash(new Date(`${v}T12:00:00`)) : "");
   // Blacklisting and whitelisting words isn't connected yet, so their switches are shown off and disabled.
   const listSwitch = label => () => `<label class="switch" title="Word lists aren't connected yet."><input type="checkbox" disabled aria-label="${label}"><span class="track"></span></label>`;
-  const wordTermGrid = (w, id) => SP.grid({ id, columns: true, pageSize: 20, sortKey: "orders", cols: [
+  // The drilldowns page with the insight cards' pager and have no search box of their own.
+  const wordTermGrid = (w, id) => SP.grid({ id, columns: true, instantSearch: false, rowsPager: true, pageSize: 20, sortKey: "orders", cols: [
     { key: "term", label: "Search terms", w: 180, fmt: searchText },
     ...searchMetricCols(["impressions", "clicks", "orders", "sales", "conversion"]), { ...searchMetricCols(["spend"])[0], label: "Spent" }, ...searchMetricCols(["cpc", "acos", "roas"]),
     { key: "lastSeen", label: "Last activity", fmt: activity },
   ], rows: w.searchTerms.map((t, i) => ({ ...t, _k: String(i) })), sum: searchSum });
-  const wordGrid = (p, id, settings) => SP.grid({ id, columns: true, pageSize: 20, sortKey: settings.sort || "clicks", dir: settings.dir === "asc" ? 1 : -1,
+  const wordGrid = (p, id, settings) => SP.grid({ id, columns: true, instantSearch: false, rowsPager: true, pageSize: 20, sortKey: settings.sort || "clicks", dir: settings.dir === "asc" ? 1 : -1,
     details: w => `<div class="detpanel">${wordTermGrid(w, `${id}-terms-${w._k}`)}</div>`,
     cols: [{ key: "sponsored", label: "Sponsored" }, { key: "word", label: "Word", fmt: searchText },
       { key: "blacklist", label: "Blacklist", sort: false, fmt: listSwitch("Blacklist") }, { key: "whitelist", label: "Whitelist", sort: false, fmt: listSwitch("Whitelist") },

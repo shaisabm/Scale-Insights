@@ -317,12 +317,15 @@
   // cols: {key,label,align('l'|'r'|'c'),muted,sort,filter,fmt(v,row),w,group}
   // With `reorder`, headers can be dragged left or right; a drop fires a bubbling "gridreorder"
   // event with { id, keys } (the visible column keys in their new order) for the page to apply.
+  // `instantSearch: false` leaves out the search box but keeps the other tools; `rowsPager` pages
+  // `pageSize` rows with the insight cards' pager (rows per page, the range shown, Previous and Next).
   const grids = (SP._grids = {});
   let gid = 0;
   SP.grid = cfg => {
     const id = cfg.id || `g${++gid}`;
     grids[id] = { ...cfg, id, q: "", sortKey: cfg.sortKey || null, dir: cfg.dir || -1, hidden: new Set(), page: 0, checked: new Set(), open: new Set() };
-    const tools = cfg.search === false ? "" : `<div class="grid-tools">${cfg.toolsBefore || ""}<label class="instant">${SP.svg(I.search)}<input placeholder="Instant search" data-gsearch="${id}" aria-label="Instant search"></label>${cfg.columns ? `<div class="anchor"><button class="plain-btn" data-gcols="${id}">${SP.svg(I.columns)}Columns</button></div>` : ""}${cfg.tools || ""}</div>`;
+    const search = cfg.instantSearch === false ? "" : `<label class="instant">${SP.svg(I.search)}<input placeholder="Instant search" data-gsearch="${id}" aria-label="Instant search"></label>`;
+    const tools = cfg.search === false ? "" : `<div class="grid-tools">${cfg.toolsBefore || ""}${search}${cfg.columns ? `<div class="anchor"><button class="plain-btn" data-gcols="${id}">${SP.svg(I.columns)}Columns</button></div>` : ""}${cfg.tools || ""}</div>`;
     return `${tools}<div class="grid-wrap ${cfg.cls || ""}"><table class="grid" data-grid="${id}">${gridHead(grids[id])}<tbody>${gridBody(grids[id])}</tbody></table></div><div class="grid-foot" data-gfoot="${id}">${gridFoot(grids[id])}</div>`;
   };
   const visCols = g => g.cols.filter(c => !g.hidden.has(c.key));
@@ -390,6 +393,13 @@
     if (g.agPager) {
       const per = g.pageSize, pages = Math.max(1, Math.ceil(n / per)), s = g.page * per, first = g.page === 0, last = g.page >= pages - 1;
       return `<div class="agpager"><label>Page Size: <select data-gpsize aria-label="Page Size">${[10, 20, 50, 100].map(k => `<option ${k === per ? "selected" : ""}>${k}</option>`).join("")}</select></label><span><b>${n ? s + 1 : 0}</b> to <b>${Math.min(n, s + per)}</b> of <b>${n}</b></span><span class="agnav"><button data-gpage="first" ${first ? "disabled" : ""} aria-label="First Page">|‹</button><button data-gpage="prev" ${first ? "disabled" : ""} aria-label="Previous Page">‹</button><span>Page <b class="pgbox">${n ? g.page + 1 : 0}</b> of <b>${n ? pages : 0}</b></span><button data-gpage="next" ${last ? "disabled" : ""} aria-label="Next Page">›</button><button data-gpage="last" ${last ? "disabled" : ""} aria-label="Last Page">›|</button></span></div>`;
+    }
+    if (g.rowsPager) {
+      if (!n) return "";
+      const per = g.pageSize, pages = Math.ceil(n / per), s = g.page * per;
+      const sizes = `<label class="zero-size">Rows <select data-gpsize aria-label="Rows per page">${[7, 10, 20, 30, 50].map(k => `<option value="${k}" ${k === per ? "selected" : ""}>${k}</option>`).join("")}</select></label>`;
+      const nav = pages > 1 ? `<button data-gpage="prev" ${g.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${g.page + 1} of ${pages}</span><button data-gpage="next" ${g.page >= pages - 1 ? "disabled" : ""}>Next ›</button>` : "";
+      return `<div class="zero-pager">${sizes}<span class="zero-showing">${s + 1 === Math.min(n, s + per) ? s + 1 : `${s + 1}–${Math.min(n, s + per)}`} of ${n}</span>${nav}</div>`;
     }
     if (!n) return g.emptyFoot === false ? "" : `<p>No items to display</p>`;
     if (g.pageSize) {

@@ -101,6 +101,15 @@ describe("Main words report", () => {
     expect(words[0].querySelector(".switch input").disabled).toBe(true);
     words[0].querySelector("[data-gdet]").click();
     await vi.waitFor(() => expect(grid("words-product-0-terms-0")).not.toBeNull());
+    // The drilldowns have Columns but no search box, and the insight cards' pager; the product list keeps its search.
+    for (const id of ["words-product-0", "words-product-0-terms-0"]) {
+      const panel = grid(id).closest(".detpanel");
+      expect(panel.querySelector(":scope > .grid-tools [data-gsearch]")).toBeNull();
+      expect(panel.querySelector(":scope > .grid-tools [data-gcols]")).not.toBeNull();
+      expect(document.querySelector(`[data-gfoot="${id}"] .zero-pager .zero-showing`).textContent).toMatch(/^1(–\d+)? of \d+$/);
+      expect(document.querySelector(`[data-gfoot="${id}"] .pager`)).toBeNull();
+    }
+    expect(document.querySelector("[data-words-results] > .grid-tools [data-gsearch]")).not.toBeNull();
     expect(heads(grid("words-product-0-terms-0"))).toEqual(["Search terms", "Impressions", "Clicks", "Orders", "Sales", "Conversion", "Spent", "CPC", "ACOS", "ROAS", "Last activity"]);
     const word = bodyRows(grid("words-product-0"))[0].children[2].textContent;
     for (const tr of bodyRows(grid("words-product-0-terms-0"))) expect(tr.children[0].textContent.split(" ")).toContain(word);
