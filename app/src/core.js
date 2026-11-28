@@ -41,6 +41,11 @@
       "Last Year": { from: new Date(y - 1, 0, 1), to: new Date(y - 1, 11, 31) },
     }[preset] || null;
   };
+  // The preset whose dates are `from` to `to` ("YYYY-MM-DD"), else "Custom Range".
+  SP.presetFor = (from, to, today = SP.today) => SP.RANGE_PRESETS.find(p => {
+    const r = SP.rangeFor(p, today);
+    return r && SP.iso(r.from) === from && SP.iso(r.to) === to;
+  }) || "Custom Range";
   SP.rangeLabel = (preset, from, to) => `${preset && preset !== "Custom Range" ? `${preset}: ` : ""}${SP.iso(from) === SP.iso(to) ? SP.shortDate(from) : `${SP.shortDate(from)} - ${SP.shortDate(to)}`}`;
 
   // ---------- Server API ----------

@@ -220,6 +220,12 @@
   };
   const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands", SP_TARGETING: "Sponsored Products", SB_TARGETING: "Sponsored Brands", SD_TARGETING: "Sponsored Display" };
   const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
+  // A date button showing `from` to `to` as the preset they are ("Last 30 Days: …"), if any.
+  const showRange = (button, from, to) => {
+    const preset = SP.presetFor(from, to);
+    Object.assign(button.dataset, { from, to, preset });
+    $(".rlabel", button).textContent = SP.rangeLabel(preset, new Date(`${from}T12:00:00`), new Date(`${to}T12:00:00`));
+  };
   // Rows per page and which rows are showing, whenever there are any; the page buttons only when
   // there's more than one page.
   const PAGE_SIZES = [7, 10, 20, 30, 50];
@@ -664,7 +670,7 @@
     wire(root, initial) {
       let query = { from: initial.from, to: initial.to, filterId: initial.filterId || "" }, current = initial, latest = 0, selected = "", tab = 0;
       const range = $("[data-range]", root), error = $("[data-search-error]", root);
-      const setRange = () => { Object.assign(range.dataset, { from: query.from, to: query.to, preset: "Custom Range" }); $(".rlabel", range).textContent = `${day(query.from)} – ${day(query.to)}`; };
+      const setRange = () => showRange(range, query.from, query.to);
       setRange();
       $("[data-search-filter]", root).value = query.filterId;
       $("[data-search-product]", root).value = selected;
@@ -819,8 +825,7 @@
     wire(root, initial) {
       let query = { from: initial.from, to: initial.to, filterId: initial.filterId || "" }, current = initial, latest = 0, selected = "";
       const range = $("[data-range]", root), error = $("[data-words-error]", root);
-      Object.assign(range.dataset, { from: query.from, to: query.to, preset: "Custom Range" });
-      $(".rlabel", range).textContent = `${day(query.from)} – ${day(query.to)}`;
+      showRange(range, query.from, query.to);
       const update = async () => {
         const request = ++latest;
         query = { ...query, filterId: $("[data-words-filter]", root).value };

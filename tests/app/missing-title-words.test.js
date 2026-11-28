@@ -115,6 +115,31 @@ describe("Main words report", () => {
     for (const tr of bodyRows(grid("words-product-0-terms-0"))) expect(tr.children[0].textContent.split(" ")).toContain(word);
   });
 
+  it("shows the dates it opens with as their preset, as /Ads does, and others as a custom range", async () => {
+    stubNavigation();
+    vi.stubGlobal("fetch", vi.fn());
+    const SP = openApp("/", { env: "preview", realData: false });
+    const last30 = SP.rangeFor("Last 30 Days"), iso = d => SP.iso(d);
+    const open = async (from, to) => {
+      openApp(`/Ads/MainKeywords?filterId=missing-title-words&from=${from}&to=${to}`, { env: "preview", realData: false });
+      await vi.waitFor(() => expect(grid("words-products")).not.toBeNull());
+      return document.querySelector("[data-range]");
+    };
+    let button = await open(iso(last30.from), iso(last30.to));
+    expect(button.dataset.preset).toBe("Last 30 Days");
+    expect(button.querySelector(".rlabel").textContent).toBe(SP.rangeLabel("Last 30 Days", last30.from, last30.to));
+    expect(button.querySelector(".rlabel").textContent).toMatch(/^Last 30 Days: /);
+    button.click();
+    expect([...document.querySelectorAll(".popover button.on")].map(b => b.textContent)).toEqual(["Last 30 Days"]);
+    button = await open("2026-10-01", "2026-10-15");
+    expect(button.dataset.preset).toBe("Custom Range");
+    expect(button.querySelector(".rlabel").textContent).toBe("1 Oct 26 - 15 Oct 26");
+    // The Search terms report does the same.
+    openApp(`/Ads/SearchTerms?filterId=zero-sales&from=${iso(last30.from)}&to=${iso(last30.to)}`, { env: "preview", realData: false });
+    await vi.waitFor(() => expect(document.querySelector("[data-search-results]")).not.toBeNull());
+    expect(document.querySelector("[data-range]").dataset.preset).toBe("Last 30 Days");
+  });
+
   it("says what Sync now did, then reloads the words", async () => {
     stubNavigation();
     const api = stubFetch({
