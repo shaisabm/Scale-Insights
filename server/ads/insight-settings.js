@@ -1,7 +1,7 @@
 import { migrate } from "../db.js";
 
 // Settings for the insight cards ("Search Terms with 0 Sales", "Search Terms with High ACOS",
-// "Keywords with 0 Sales"): their name and tip, which search terms or keywords they list, how
+// "Keywords with 0 Sales", "Keywords with High ACOS"): their name and tip, which search terms or keywords they list, how
 // they're sorted, and which metric columns they show. Saved per profile and per card.
 export const ZERO_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "roas", "spend", "sales", "pl", "breakEvenBid"];
 // Break even bid needs product costs, which aren't connected yet, so it can't filter, sort or show.
@@ -96,9 +96,21 @@ export const KEYWORD_ZERO_DEFAULTS = Object.freeze({
   pageSize: 7,
 });
 
+// Keywords and targets that spent $20 or more at an ACOS of 60% or more, worst ACOS first, leaving out
+// auto targets. P&L needs product costs once anything sold, so its column stays blank for now.
+export const KEYWORD_HIGH_ACOS_DEFAULTS = Object.freeze({
+  ...KEYWORD_ZERO_DEFAULTS,
+  name: "Keywords with High ACOS",
+  description: "[Tip]: You can automatically lower the bids of keywords with high ACOS using Automation.",
+  sort: "acos",
+  filters: { acos: { min: 60 }, spend: { min: 20 } },
+  track: ["clicks", "units", "cpc", "conversion", "acos", "spend", "pl", "currentBid"],
+  order: ["p", "campaign", "adGroup", "keyword", "clicks", "units", "conversion", "spend", "currentBid", "cpc", "acos", "pl"],
+});
+
 // Each card starts from its own defaults until its settings are saved.
 export const SEARCH_INSIGHT_DEFAULTS = { "zero-sales": ZERO_DEFAULTS, "high-acos": ACOS_DEFAULTS, performing: PERFORMING_DEFAULTS };
-export const KEYWORD_INSIGHT_DEFAULTS = { "zero-sales-keywords": KEYWORD_ZERO_DEFAULTS };
+export const KEYWORD_INSIGHT_DEFAULTS = { "zero-sales-keywords": KEYWORD_ZERO_DEFAULTS, "high-acos-keywords": KEYWORD_HIGH_ACOS_DEFAULTS };
 export const INSIGHT_DEFAULTS = { ...SEARCH_INSIGHT_DEFAULTS, ...KEYWORD_INSIGHT_DEFAULTS };
 
 // What a card's settings may name: search term cards and keyword cards differ in metrics, columns

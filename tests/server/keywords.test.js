@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client";
 import { describe, expect, it, vi } from "vitest";
 import { GET as keywordsRoute } from "../../api/ads/keywords.js";
 import { PUT as saveRoute } from "../../api/ads/[settings].js";
-import { KEYWORD_ZERO_DEFAULTS, cleanInsightSettings } from "../../server/ads/insight-settings.js";
+import { KEYWORD_HIGH_ACOS_DEFAULTS, KEYWORD_ZERO_DEFAULTS, cleanInsightSettings } from "../../server/ads/insight-settings.js";
 import { hiddenKeyword, keywordInsight } from "../../server/ads/keywords.js";
 import { normalizeTargets, reportSpec, storeWindow, syncAds } from "../../server/ads/sync.js";
 import { zeroSales } from "../../server/ads/zero-sales.js";
@@ -276,11 +276,51 @@ describe("Keywords with 0 Sales", () => {
   });
 });
 
+describe("Keywords with High ACOS", () => {
+  it("lists keywords and targets that spent $20 or more at 60% ACOS or more, worst first, leaving out auto targets", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    await store(db, "SP_TARGETING", [
+      target("worst", 42.88, { orders: 1, sales: 20.99 }),
+      target("edge", 30, { orders: 1, sales: 50 }),
+      target("below", 29.99, { orders: 1, sales: 50.01 }),
+      target("cheap", 19.99, { orders: 1, sales: 5 }),
+      target("unsold", 60),
+      target("auto", 200, { kind: "auto", text: "loose-match", orders: 2, sales: 49.98 }),
+    ]);
+    await store(db, "SB_TARGETING", [target("brand", 77.95, { campaignId: "sb", orders: 2, sales: 50.98, matchType: "broad" })]);
+    const report = await keywordInsight(db, { profileId, from, to, settings: structuredClone(KEYWORD_HIGH_ACOS_DEFAULTS) });
+    // 60% exactly is in; no sales means no ACOS, so a keyword that sold nothing isn't listed.
+    expect(report.rows.map(r => [r.keywordId, Math.round(r.acos * 100) / 100])).toEqual([["worst", 204.29], ["brand", 152.9], ["edge", 60]]);
+    expect(report.rows[0]).toMatchObject({ clicks: 10, units: 1, conversion: 10, spend: 42.88, cpc: 4.288, currentBid: 1, pl: null });
+    expect(report.totals).toMatchObject({ spend: 150.83, sales: 121.97, pl: null });
+  });
+
+  it("is served and saved under its own filter", async () => {
+    vi.stubEnv("SESSION_SECRET", "secret");
+    vi.stubEnv("TURSO_DATABASE_URL", ":memory:");
+    vi.stubEnv("AMAZON_ADS_PROFILE_ID", profileId);
+    try {
+      const report = async () => (await keywordsRoute(signedIn("https://app.test/api/ads/keywords?filterId=high-acos-keywords&days=30"))).json();
+      expect(await report()).toMatchObject({ filterId: "high-acos-keywords", settings: KEYWORD_HIGH_ACOS_DEFAULTS });
+      const saved = await saveRoute(new Request("https://app.test/api/ads/high-acos-keywords-settings", {
+        method: "PUT", body: JSON.stringify({ ...structuredClone(KEYWORD_HIGH_ACOS_DEFAULTS), filters: { acos: { min: 80 } } }), headers: { "Content-Type": "application/json", cookie: `${SESSION_COOKIE}=${createSessionToken("secret")}` },
+      }));
+      expect(saved.status).toBe(200);
+      expect((await report()).settings.filters).toEqual({ acos: { min: 80 } });
+      // The 0 sales card keeps its own settings.
+      expect((await (await keywordsRoute(signedIn("https://app.test/api/ads/keywords?filterId=zero-sales-keywords&days=30"))).json()).settings).toEqual(KEYWORD_ZERO_DEFAULTS);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe("keyword card settings", () => {
   const valid = (changes = {}) => ({ ...defaults(), ...changes });
 
   it("accepts the keyword card's own options, metrics and columns", () => {
     expect(cleanInsightSettings(valid(), KEYWORD_ZERO_DEFAULTS).settings).toEqual(KEYWORD_ZERO_DEFAULTS);
+    expect(cleanInsightSettings(structuredClone(KEYWORD_HIGH_ACOS_DEFAULTS), KEYWORD_HIGH_ACOS_DEFAULTS).settings).toEqual(KEYWORD_HIGH_ACOS_DEFAULTS);
     const { settings } = cleanInsightSettings(valid({ hideBroad: true, sort: "topShare", filters: { currentBid: { min: "0.5" } }, track: ["currentBid", "topShare"], order: ["keyword", "p", "campaign"] }), KEYWORD_ZERO_DEFAULTS);
     expect(settings).toMatchObject({ hideBroad: true, sort: "topShare", filters: { currentBid: { min: 0.5 } }, track: ["topShare", "currentBid"], order: ["keyword", "p", "campaign"] });
     expect(settings).not.toHaveProperty("hideAsins");
