@@ -98,7 +98,7 @@
   };
   // Keywords and targets that spent $20 or more without an order, costliest first, with the current
   // bid next to the clicks.
-  const KEYWORD_ZERO_DEFAULTS = { name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true, hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false, sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7 };
+  const KEYWORD_ZERO_DEFAULTS = { name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true, hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false, sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7 };
   const keywordDefaults = () => JSON.parse(JSON.stringify(KEYWORD_ZERO_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
@@ -141,7 +141,9 @@
     ["Products", `SP-EXACT-RANK - ${P[0].asin}`, "Exact", "jump rope for women", "keyword", "exact", "enabled", 4000, 40, 38.2, 74.97, 3, 1.14],
     ["Products", `SP-PHRASE-DISCOVERY - ${P[1].asin}`, "Phrase", "cordless battle ropes", "keyword", "phrase", "enabled", 900, 9, 8.1, 0, 0, 0.95],
   ];
-  const keywordRow = ([sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, spend, sales, orders, currentBid]) => ({
+  // The product is the one the campaign names, else one of the two; Display has none, as in its reports.
+  const keywordRow = ([sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, spend, sales, orders, currentBid], i) => ({
+    p: sponsored === "Display" ? null : P.slice(0, 2).find(p => campaign.includes(p.asin)) || P[i % 2],
     sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100,
     conversion: (orders / clicks) * 100, acos: sales ? (spend / sales) * 100 : null, roas: sales / spend, topShare: sponsored === "Display" ? null : (clicks / impressions) * 1000,
     pl: orders ? null : -spend, breakEvenBid: null, currentBid,
@@ -231,12 +233,14 @@
   };
   const zeroCols = (s, showIds = false) => insightCols(s, [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: textCell },
     ...(showIds ? [{ key: "campaignId", label: "Campaign ID", w: 130, fmt: textCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: textCell }] : [])], ZERO_METRICS);
-  const keywordCols = s => insightCols(s, [{ key: "campaign", label: "Campaign", w: 180, fmt: textCell }, { key: "adGroup", label: "Ad group", w: 130, fmt: textCell }, { key: "keyword", label: "Keyword", w: 150, fmt: textCell }], KEYWORD_METRICS);
+  // Column orders saved before the card had a Product column still show it first.
+  const keywordCols = s => insightCols({ ...s, order: s.order?.length && !s.order.includes("p") ? ["p", ...s.order] : s.order },
+    [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "campaign", label: "Campaign", w: 180, fmt: textCell }, { key: "adGroup", label: "Ad group", w: 130, fmt: textCell }, { key: "keyword", label: "Keyword", w: 150, fmt: textCell }], KEYWORD_METRICS);
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
   const zeroBody = (data, s, id, showIds = false) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s, showIds), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
   // A keyword card that couldn't load says why, and the search term cards still show.
   const keywordBody = (data, s, id) => (data.error ? `<div class="zero-status" data-zero-status>Keywords couldn't load: ${SP.esc(data.error)}</div>`
-    : `${zeroStatus(data, { what: "keywords", reports: "Keyword reports" })}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: keywordCols(s), rows: data.rows, sum: data.totals, below: zeroPager(data) })}`);
+    : `${zeroStatus(data, { what: "keywords", reports: "Keyword reports" })}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: keywordCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`);
   // The edit dialog for a card's settings: its metrics (`spec.metrics`) and what it can hide (`spec.hides`).
   const zeroEdit = (s, spec = SEARCH_SPEC) => {
     const sorts = spec.metrics.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");

@@ -12,7 +12,7 @@ const field = sel => document.querySelector(`.modal-wrap ${sel}`);
 const keywordSettings = (overrides = {}) => ({
   name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true,
   hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false,
-  sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7, ...overrides,
+  sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7, ...overrides,
 });
 const keyword = (keyword, clicks, spend, currentBid) => ({ sponsored: "Products", campaign: `Campaign for ${keyword}`, adGroup: "Exact", keyword, kind: "keyword", matchType: "exact", state: "enabled", clicks, spend, cpc: spend / clicks, pl: -spend, currentBid });
 const searchPage = { page: 0, pageSize: 7, total: 0, rows: [], totals: {}, coverage: {} };
@@ -30,7 +30,11 @@ describe("Keywords with 0 Sales card", () => {
     openApp("/Ads", { env: "preview", realData: false });
     await vi.waitFor(() => expect(card()?.querySelector("table.grid")).toBeTruthy());
     expect(card().querySelector("h3").textContent).toBe("Keywords with 0 Sales");
-    expect(labels()).toEqual(["Campaign", "Ad group", "Keyword", "Clicks", "Current bid", "CPC", "P&L"]);
+    expect(labels()).toEqual(["Product", "Campaign", "Ad group", "Keyword", "Clicks", "Current bid", "CPC", "P&L"]);
+    // Each sample keyword shows its product's thumbnail, except Sponsored Display, which names none.
+    expect(bodyRows()[0].children[0].querySelector(".thumb")).not.toBeNull();
+    const display = bodyRows().find(tr => tr.textContent.includes("audiences-likely-interested-in-ad"));
+    expect(display.children[0].querySelector(".zero-product")).not.toBeNull();
     // Eight of the sample keywords pass the defaults: the auto target, the one that sold and the one
     // that spent under $20 don't.
     expect(bodyRows()).toHaveLength(7);
@@ -78,7 +82,7 @@ describe("Keywords with 0 Sales card", () => {
     field("[data-track=topShare]").checked = true;
     field("[data-ok]").click();
     await vi.waitFor(() => expect(bodyRows()).toHaveLength(3));
-    expect(bodyRows().map(tr => tr.children[2].textContent)).toEqual(["training rope with handles", "battle rope", "battle ropes for home gym"]);
+    expect(bodyRows().map(tr => tr.children[3].textContent)).toEqual(["training rope with handles", "battle rope", "battle ropes for home gym"]);
     expect(labels()).toContain("TOS share");
   });
 
@@ -106,6 +110,32 @@ describe("Keywords with 0 Sales card", () => {
     await vi.waitFor(() => expect(card().querySelector("h3").textContent).toBe("Wasted keywords"));
     // Paging asks the same endpoint for the same filter.
     expect(api.mock.calls.filter(([url]) => String(url).startsWith("/api/ads/keywords?filterId=zero-sales-keywords")).length).toBeGreaterThan(1);
+  });
+
+  it("shows each keyword's product image like the search term cards, first even in a column order saved before it", async () => {
+    stubNavigation();
+    const one = { asin: "B0PRODUCTA", title: "Weighted Jump Rope", image: "/api/ads/product-image?asin=B0PRODUCTA" };
+    const two = { asin: "B0PRODUCTB", title: "Battle Rope", image: null };
+    const rows = [
+      { ...keyword("weighted battle ropes", 46, 45.77, 1.13), asin: one.asin, title: one.title, image: one.image, products: [one] },
+      { ...keyword("battle ropes for home gym", 23, 27.37, 0.81), asin: "B0PRODUCTA,B0PRODUCTB", title: one.title, image: one.image, products: [one, two] },
+      { ...keyword("audiences-likely-interested-in-ad", 59, 21.96, 0.2), sponsored: "Display", kind: "target", asin: "", title: "", image: null, products: [] },
+    ];
+    const saved = keywordSettings({ order: ["keyword", "campaign", "adGroup", "clicks", "currentBid"] });
+    stubFetch({
+      "GET /api/ads/zero-sales": searchPage, "GET /api/ads/high-acos": searchPage, "GET /api/ads/performing": searchPage,
+      "GET /api/ads/keywords": keywordPage(rows, saved),
+    });
+    openApp("/Ads", { realData: true });
+    await vi.waitFor(() => expect(card()?.querySelector("table.grid")).toBeTruthy());
+    expect(labels()).toEqual(["Product", "Keyword", "Campaign", "Ad group", "Clicks", "Current bid", "CPC", "P&L"]);
+    const [single, multi, display] = bodyRows().map(tr => tr.children[0]);
+    expect(single.querySelector("img.zero-thumb").getAttribute("src")).toBe("/api/ads/product-image?asin=B0PRODUCTA");
+    expect(single.querySelector("img").getAttribute("alt")).toBe("Weighted Jump Rope");
+    expect(multi.querySelector("[data-zero-multi]").getAttribute("aria-label")).toBe("Weighted Jump Rope (B0PRODUCTA) + Battle Rope (B0PRODUCTB)");
+    expect(multi.querySelector(".zero-count").textContent).toBe("+1");
+    expect(multi.querySelectorAll(".zero-pop figure")).toHaveLength(2);
+    expect(display.querySelector(".zero-product")).not.toBeNull();
   });
 
   it("says why it couldn't load, while the search term cards still show", async () => {

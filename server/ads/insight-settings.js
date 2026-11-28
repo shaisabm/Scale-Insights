@@ -67,8 +67,8 @@ export const PERFORMING_DEFAULTS = Object.freeze({
 // The keyword insight cards ("Keywords with 0 Sales") list keywords and targets instead. They add
 // top-of-search impression share and the current bid to the metrics, in the dialog's order.
 export const KEYWORD_METRICS = ["impressions", "clicks", "orders", "units", "cpc", "ctr", "conversion", "acos", "topShare", "roas", "spend", "sales", "pl", "breakEvenBid", "currentBid"];
-// The card's column keys (campaign, ad group, keyword or target, then metrics).
-export const KEYWORD_COLUMNS = ["campaign", "adGroup", "keyword", ...KEYWORD_METRICS];
+// The card's column keys (product, campaign, ad group, keyword or target, then metrics).
+export const KEYWORD_COLUMNS = ["p", "campaign", "adGroup", "keyword", ...KEYWORD_METRICS];
 // What a keyword card can leave out: product, keyword and auto targets, each keyword match type,
 // and paused keywords or targets.
 export const KEYWORD_HIDES = ["hideProductTargets", "hideKeywordTargets", "hideAutoTargets", "hideExact", "hidePhrase", "hideBroad", "hidePausedKeywords", "hidePausedTargets"];
@@ -92,7 +92,7 @@ export const KEYWORD_ZERO_DEFAULTS = Object.freeze({
   filters: { orders: { max: 0 }, spend: { min: 20 } },
   track: ["clicks", "cpc", "pl", "currentBid"],
   // The current bid sits next to the clicks, as in the original card.
-  order: ["campaign", "adGroup", "keyword", "clicks", "currentBid"],
+  order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"],
   pageSize: 7,
 });
 

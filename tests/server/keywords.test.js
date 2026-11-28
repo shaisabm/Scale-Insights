@@ -106,6 +106,36 @@ describe("Keywords with 0 Sales", () => {
     expect((await keywordInsight(db, { profileId, from, to })).rows.map(r => r.keyword)).toEqual(["battle ropes for home gym"]);
   });
 
+  it("names the products each keyword's ad group advertised in the dates, with their titles and images", async () => {
+    const db = await migrate(createClient({ url: ":memory:" }));
+    const ad = (adGroupId, asin, date = to) => ({ date, campaignId: "c1", adGroupId, asin, impressions: 1, clicks: 1, cost: 1, orders: 0, units: 0, sales: 0 });
+    await store(db, "SP", [ad("one", "B0PRODUCTA"), ad("shared", "B0PRODUCTB"), ad("shared", "B0PRODUCTA"), ad("old", "B0PRODUCTC", "2026-10-01")], "2026-10-01", to);
+    await store(db, "SP_TARGETING", [target("single", 50, { adGroupId: "one" }), target("bundle", 40, { adGroupId: "shared" }), target("old", 35, { adGroupId: "old" })]);
+    await store(db, "SB_TARGETING", [target("brand", 30, { campaignId: "sb", adGroupId: "sbg" }), target("unmapped", 25, { campaignId: "sb", adGroupId: "new" })]);
+    await store(db, "SD_TARGETING", [target("display", 20, { kind: "target" })]);
+    await db.batch([
+      // The Sponsored Brands group's ads changed within the dates, so it names both sets.
+      { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'sbg', 'B0PRODUCTB', '2026-10-01', '2026-11-10', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'sbg', 'B0PRODUCTA,B0PRODUCTB', '2026-11-11', '2026-11-26', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'new', 'B0PRODUCTC', '2026-09-01', '2026-10-27', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_products VALUES (?, 'B0PRODUCTA', 'Weighted Jump Rope', 'https://m.media-amazon.com/images/I/a.jpg', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_products VALUES (?, 'B0PRODUCTB', 'Battle Rope', '', 'now')", args: [profileId] },
+    ], "write");
+    const rows = (await keywordInsight(db, { profileId, from, to })).rows;
+    const a = { asin: "B0PRODUCTA", title: "Weighted Jump Rope", image: "/api/ads/product-image?asin=B0PRODUCTA" }, b = { asin: "B0PRODUCTB", title: "Battle Rope", image: null };
+    const none = { asin: "", title: "", image: null, products: [] };
+    expect(rows.map(r => [r.keywordId, { asin: r.asin, title: r.title, image: r.image, products: r.products }])).toEqual([
+      ["single", { ...a, products: [a] }],
+      ["bundle", { asin: "B0PRODUCTA,B0PRODUCTB", title: a.title, image: a.image, products: [a, b] }],
+      // Its only ad reported before the dates.
+      ["old", none],
+      ["brand", { asin: "B0PRODUCTA,B0PRODUCTB", title: a.title, image: a.image, products: [a, b] }],
+      // Its history ends the day before the dates.
+      ["unmapped", none],
+      ["display", none],
+    ]);
+  });
+
   it("adds up the dates, naming each keyword and its bid as last reported, and weights top-of-search share by impressions", async () => {
     const db = await migrate(createClient({ url: ":memory:" }));
     await store(db, "SP_TARGETING", [
@@ -173,8 +203,8 @@ describe("keyword card settings", () => {
 
   it("accepts the keyword card's own options, metrics and columns", () => {
     expect(cleanInsightSettings(valid(), KEYWORD_ZERO_DEFAULTS).settings).toEqual(KEYWORD_ZERO_DEFAULTS);
-    const { settings } = cleanInsightSettings(valid({ hideBroad: true, sort: "topShare", filters: { currentBid: { min: "0.5" } }, track: ["currentBid", "topShare"], order: ["keyword", "campaign"] }), KEYWORD_ZERO_DEFAULTS);
-    expect(settings).toMatchObject({ hideBroad: true, sort: "topShare", filters: { currentBid: { min: 0.5 } }, track: ["topShare", "currentBid"], order: ["keyword", "campaign"] });
+    const { settings } = cleanInsightSettings(valid({ hideBroad: true, sort: "topShare", filters: { currentBid: { min: "0.5" } }, track: ["currentBid", "topShare"], order: ["keyword", "p", "campaign"] }), KEYWORD_ZERO_DEFAULTS);
+    expect(settings).toMatchObject({ hideBroad: true, sort: "topShare", filters: { currentBid: { min: 0.5 } }, track: ["topShare", "currentBid"], order: ["keyword", "p", "campaign"] });
     expect(settings).not.toHaveProperty("hideAsins");
   });
 

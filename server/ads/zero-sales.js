@@ -40,6 +40,16 @@ export function metrics(r) {
 export const within = (v, f) => v != null && (f.min == null || v + 0.000001 >= f.min) && (f.max == null || v - 0.000001 <= f.max);
 
 /**
+ * The products a row names (sorted, comma-separated ASINs), each with its title and image, from
+ * `products` (ads_products rows by ASIN). Images are served by /api/ads/product-image, which
+ * fetches them from Amazon on the server.
+ */
+export const productList = (products, asins) => asins.split(",").map(asin => {
+  const product = products.get(asin);
+  return { asin, title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(asin)}` : null };
+});
+
+/**
  * One search term per ad type and advertised product set for every insight card. Counts are aggregated over the chosen dates before the
  * card's filters, sort and pagination. `today` marks Amazon's available dates.
  */
@@ -129,13 +139,9 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   // last page instead, so the card keeps its rows and pager.
   const at = Math.min(page, Math.max(0, Math.ceil(total / pageSize) - 1));
   const shown = matched.slice(at * pageSize, (at + 1) * pageSize);
-  // Images are served by /api/ads/product-image, which fetches them from Amazon on the server.
   // title and image are the first product's; `products` lists every product the row names.
   const rows = shown.map(r => {
-    const list = r.asin.split(",").map(asin => {
-      const product = products.get(asin);
-      return { asin, title: product?.title || "", image: product?.image_url ? `/api/ads/product-image?asin=${encodeURIComponent(asin)}` : null };
-    });
+    const list = productList(products, r.asin);
     // counts stays server-side; an undefined property is left out of the JSON.
     return { ...r, counts: undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: list[0].title, image: list[0].image, products: list };
   });
