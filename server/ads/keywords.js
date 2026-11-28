@@ -63,10 +63,14 @@ export async function keywordInsight(db, { profileId, from, to, today, page = 0,
     // The products each ad group advertised in these dates: Sponsored Products through the ads that
     // reported, Sponsored Brands through the history of what its ads listed. Sponsored Display
     // reports name no product and its ads list has no history, so its ad groups take the product
-    // ads they have now.
+    // ads they have enabled now, or, with none enabled, the ones they have.
     { sql: "SELECT campaign_id, ad_group_id, asin FROM ads_daily WHERE profile_id = ? AND ad_product = 'SP' AND asin <> '' AND date BETWEEN ? AND ? GROUP BY campaign_id, ad_group_id, asin", args: [profileId, from, to] },
     { sql: "SELECT campaign_id, ad_group_id, asins FROM ads_search_product_history WHERE profile_id = ? AND ad_product = 'SB_SEARCH' AND valid_from <= ? AND valid_to >= ?", args: [profileId, to, from] },
-    { sql: "SELECT campaign_id, ad_group_id, asin FROM ads_sd_product_ads WHERE profile_id = ?", args: [profileId] },
+    {
+      sql: `SELECT campaign_id, ad_group_id, asin FROM ads_sd_product_ads a WHERE profile_id = ? AND (state = 'enabled' OR NOT EXISTS (
+              SELECT 1 FROM ads_sd_product_ads e WHERE e.profile_id = a.profile_id AND e.campaign_id = a.campaign_id AND e.ad_group_id = a.ad_group_id AND e.state = 'enabled'))`,
+      args: [profileId],
+    },
     { sql: "SELECT asin, title, image_url FROM ads_products WHERE profile_id = ?", args: [profileId] },
   ], "read");
   const advertised = new Map();

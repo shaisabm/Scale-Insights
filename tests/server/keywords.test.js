@@ -151,17 +151,22 @@ describe("Keywords with 0 Sales", () => {
     await store(db, "SP", [ad("one", "B0PRODUCTA"), ad("shared", "B0PRODUCTB"), ad("shared", "B0PRODUCTA"), ad("old", "B0PRODUCTC", "2026-10-01")], "2026-10-01", to);
     await store(db, "SP_TARGETING", [target("single", 50, { adGroupId: "one" }), target("bundle", 40, { adGroupId: "shared" }), target("old", 35, { adGroupId: "old" })]);
     await store(db, "SB_TARGETING", [target("brand", 30, { campaignId: "sb", adGroupId: "sbg" }), target("unmapped", 25, { campaignId: "sb", adGroupId: "new" })]);
-    await store(db, "SD_TARGETING", [target("display", 20, { kind: "target", campaignId: "sd", adGroupId: "sdg" }), target("unlisted", 20, { kind: "target", campaignId: "sd", adGroupId: "gone" })]);
+    await store(db, "SD_TARGETING", [target("display", 20, { kind: "target", campaignId: "sd", adGroupId: "sdg" }), target("unlisted", 20, { kind: "target", campaignId: "sd", adGroupId: "gone" }),
+      target("swapped", 20, { kind: "target", campaignId: "sd", adGroupId: "swap" }), target("paused", 20, { kind: "target", campaignId: "sd", adGroupId: "resting" })]);
     await db.batch([
       // The Sponsored Brands group's ads changed within the dates, so it names both sets.
       { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'sbg', 'B0PRODUCTB', '2026-10-01', '2026-11-10', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'sbg', 'B0PRODUCTA,B0PRODUCTB', '2026-11-11', '2026-11-26', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_search_product_history VALUES (?, 'SB_SEARCH', 'sb', 'new', 'B0PRODUCTC', '2026-09-01', '2026-10-27', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_sd_product_ads VALUES (?, 'ad1', 'sd', 'sdg', 'B0PRODUCTA', 'enabled', 'now')", args: [profileId] },
+      // An ad group whose product was swapped: the archived ad's product is no longer advertised.
+      { sql: "INSERT INTO ads_sd_product_ads VALUES (?, 'ad2', 'sd', 'swap', 'B0PRODUCTA', 'archived', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_sd_product_ads VALUES (?, 'ad3', 'sd', 'swap', 'B0PRODUCTB', 'enabled', 'now')", args: [profileId] },
+      { sql: "INSERT INTO ads_sd_product_ads VALUES (?, 'ad4', 'sd', 'resting', 'B0PRODUCTA', 'paused', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_products VALUES (?, 'B0PRODUCTA', 'Weighted Jump Rope', 'https://m.media-amazon.com/images/I/a.jpg', 'now')", args: [profileId] },
       { sql: "INSERT INTO ads_products VALUES (?, 'B0PRODUCTB', 'Battle Rope', '', 'now')", args: [profileId] },
     ], "write");
-    const rows = (await keywordInsight(db, { profileId, from, to })).rows;
+    const rows = (await keywordInsight(db, { profileId, from, to, pageSize: 50 })).rows;
     const a = { asin: "B0PRODUCTA", title: "Weighted Jump Rope", image: "/api/ads/product-image?asin=B0PRODUCTA" }, b = { asin: "B0PRODUCTB", title: "Battle Rope", image: null };
     const none = { asin: "", title: "", image: null, products: [] };
     expect(rows.map(r => [r.keywordId, { asin: r.asin, title: r.title, image: r.image, products: r.products }])).toEqual([
@@ -173,6 +178,9 @@ describe("Keywords with 0 Sales", () => {
       // Its history ends the day before the dates.
       ["unmapped", none],
       ["display", { ...a, products: [a] }],
+      // With no ad enabled, its ad group's paused ad still names the product.
+      ["paused", { ...a, products: [a] }],
+      ["swapped", { ...b, products: [b] }],
       // Its ad group has no product ads listed.
       ["unlisted", none],
     ]);
