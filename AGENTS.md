@@ -1,6 +1,6 @@
 # Project rules
 
-Scale Insights is a static web app with Vercel Functions behind it. `app/build.mjs` copies `app/src/` to `app/dist/`, which Vercel serves; `api/` holds the functions that serve live data.
+Scale PPC is a static web app with Vercel Functions behind it. `app/build.mjs` copies `app/src/` to `app/dist/`, which Vercel serves; `api/` holds the functions that serve live data.
 
 ## Code layout
 
