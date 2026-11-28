@@ -58,9 +58,10 @@ export const productList = (products, asins) => asins.split(",").map(asin => {
 
 /**
  * One search term per ad type and advertised product set for every insight card. Counts are aggregated over the chosen dates before the
- * card's filters, sort and pagination. `today` marks Amazon's available dates.
+ * card's filters, sort and pagination. `today` marks Amazon's available dates. `withCounts` keeps
+ * each row's summed counts (`counts`, unrounded) and its last date with activity (`lastSeen`).
  */
-export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize: asked, settings = ZERO_DEFAULTS, includeDetails = false }) {
+export async function zeroSales(db, { profileId, from, to, today, page = 0, pageSize: asked, settings = ZERO_DEFAULTS, includeDetails = false, withCounts = false }) {
   // Rows per page: as asked, else the card's saved choice, else 7.
   const pageSize = asked ?? settings.pageSize ?? 7;
   await migrate(db);
@@ -87,7 +88,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
       sql: `SELECT t.ad_product, t.campaign_id, t.ad_group_id, t.search_term, h.asins,
                    ${includeDetails ? "t.keyword_id, t.keyword, t.match_type, t.detailed, MAX(t.campaign_name) AS campaign_name, MAX(t.ad_group_name) AS ad_group_name, MAX(t.date) AS last_seen," : ""}
                    SUM(t.impressions) AS impressions, SUM(t.clicks) AS clicks,
-                   SUM(t.cost) AS cost, SUM(t.orders) AS orders, SUM(t.units) AS units, SUM(t.sales) AS sales
+                   SUM(t.cost) AS cost, SUM(t.orders) AS orders, SUM(t.units) AS units, SUM(t.sales) AS sales, MAX(t.date) AS last_date
             FROM ${source} t
             LEFT JOIN ads_search_product_history h ON h.profile_id = t.profile_id AND h.ad_product = t.ad_product
               AND h.campaign_id = t.campaign_id AND h.ad_group_id = t.ad_group_id AND t.date BETWEEN h.valid_from AND h.valid_to
@@ -127,6 +128,7 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
     const key = JSON.stringify([r.ad_product, asin, r.search_term]);
     const row = grouped.get(key) || { adProduct: r.ad_product, ...(includeDetails ? { details: [] } : {}), asin, term: r.search_term, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
     for (const k of ["impressions", "clicks", "cost", "orders", "units", "sales"]) row[k] += Number(r[k]);
+    if (!row.lastDate || r.last_date > row.lastDate) row.lastDate = r.last_date;
     if (includeDetails) row.details.push({ campaignId: String(r.campaign_id), adGroupId: String(r.ad_group_id),
       campaignName: r.campaign_name, adGroupName: r.ad_group_name, keywordId: r.keyword_id,
       keyword: r.keyword, matchType: r.match_type, lastSeen: r.last_seen, detailed: Boolean(r.detailed),
@@ -151,8 +153,8 @@ export async function zeroSales(db, { profileId, from, to, today, page = 0, page
   // title and image are the first product's; `products` lists every product the row names.
   const rows = shown.map(r => {
     const list = productList(products, r.asin);
-    // counts stays server-side; an undefined property is left out of the JSON.
-    return { ...r, counts: undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: list[0].title, image: list[0].image, products: list };
+    // counts stays server-side unless asked for; an undefined property is left out of the JSON.
+    return { ...r, counts: withCounts ? r.counts : undefined, lastSeen: withCounts ? r.counts.lastDate : undefined, sponsored: r.adProduct === "SP_SEARCH" ? "Products" : "Brands", title: list[0].title, image: list[0].image, products: list };
   });
   // The source table's footer totals the current page; its ratios come from the page's sums.
   const sum = { impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };

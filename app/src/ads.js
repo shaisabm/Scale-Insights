@@ -57,14 +57,14 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords", kwa: "high-acos-keywords" };
-  // Search term cards open the Search terms report, and keyword cards the Performance report's
-  // Keywords tab, filtered by the card and for its dates.
+  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords", kwa: "high-acos-keywords", mw: "missing-title-words" };
+  // Search term cards open the Search terms report, keyword cards the Performance report's Keywords
+  // tab and word cards the Main words report, filtered by the card and for its dates.
   const insightLink = (id, range = {}) => {
     const initial = SP.rangeFor("Last 30 Days");
-    return `${id.startsWith("kw") ? "/Ads/Performance/Keywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
+    return `${id.startsWith("kw") ? "/Ads/Performance/Keywords" : id === "mw" ? "/Ads/MainKeywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
   };
-  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card", kwa: "data-kwa-card" };
+  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card", kwa: "data-kwa-card", mw: "data-words-card" };
   const card = (title, body, tip, id, range) => `<section class="icard" ${CARD_ATTRS[id]}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${insightLink(id, range)}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
@@ -96,6 +96,12 @@
       ["hideExact", "Hide exact keywords from results"], ["hidePhrase", "Hide phrase keywords from results"], ["hideBroad", "Hide broad keywords from results"],
       ["hidePausedKeywords", "Hide keywords with paused status from results"], ["hidePausedTargets", "Hide targets with paused status from results"]],
   };
+  // Word cards list the words of search terms; they have no P&L or break even bid.
+  const WORD_METRICS = ZERO_METRICS.filter(([k]) => !["pl", "breakEvenBid"].includes(k));
+  const WORD_SPEC = { metrics: WORD_METRICS, hides: [["hideAsins", "Hide ASINs"], ["hideInTitle", "Hide words if they appear in Title"]] };
+  // Words with 3 or more orders and 8% conversion or more that the product's title doesn't have, most orders first.
+  const MISSING_TITLE_DEFAULTS = { name: "Missing good Word In Title", description: "[Tip]: Consider adding relevant keyword with high traffic and conversion to your product title for boosting their organic ranking.", showTracked: true, hideAsins: true, hideInTitle: true, sort: "orders", dir: "desc", filters: { orders: { min: 3 }, conversion: { min: 8 } }, track: ["clicks", "orders", "conversion"], order: [], pageSize: 7 };
+  const missingTitleDefaults = () => JSON.parse(JSON.stringify(MISSING_TITLE_DEFAULTS));
   // Keywords and targets that spent $20 or more without an order, costliest first, with the current
   // bid next to the clicks.
   const KEYWORD_ZERO_DEFAULTS = { name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true, hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false, sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["p", "campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7 };
@@ -167,9 +173,11 @@
     conversion: (orders / clicks) * 100, acos: sales ? (spend / sales) * 100 : null, roas: sales / spend, topShare: sponsored === "Display" ? null : (clicks / impressions) * 1000,
     pl: orders ? null : -spend, breakEvenBid: null, currentBid,
   });
-  // Which rows a card's settings leave out: ASINs or keywords for search term cards; for keyword
-  // cards, kinds of target, match types and paused keywords or targets.
+  // Which rows a card's settings leave out: ASINs or keywords for search term cards; ASINs or words
+  // already in the title for word cards; for keyword cards, kinds of target, match types and paused
+  // keywords or targets.
   const searchHidden = s => r => (s.hideAsins && asinTerm.test(r.term)) || (s.hideKeywords && !asinTerm.test(r.term));
+  const wordHidden = s => r => (s.hideAsins && asinTerm.test(r.word)) || (s.hideInTitle && r.inTitle === true);
   const keywordHidden = s => r => (s.hideProductTargets && r.kind === "target") || (s.hideKeywordTargets && r.kind === "keyword") || (s.hideAutoTargets && r.kind === "auto")
     || (s.hideExact && r.matchType === "exact") || (s.hidePhrase && r.matchType === "phrase") || (s.hideBroad && r.matchType === "broad")
     || (r.state === "paused" && (r.kind === "keyword" ? s.hidePausedKeywords : s.hidePausedTargets));
@@ -212,6 +220,12 @@
   };
   const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands", SP_TARGETING: "Sponsored Products", SB_TARGETING: "Sponsored Brands", SD_TARGETING: "Sponsored Display" };
   const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
+  // A date button showing `from` to `to` as the preset they are ("Last 30 Days: …"), if any.
+  const showRange = (button, from, to) => {
+    const preset = SP.presetFor(from, to);
+    Object.assign(button.dataset, { from, to, preset });
+    $(".rlabel", button).textContent = SP.rangeLabel(preset, new Date(`${from}T12:00:00`), new Date(`${to}T12:00:00`));
+  };
   // Rows per page and which rows are showing, whenever there are any; the page buttons only when
   // there's more than one page.
   const PAGE_SIZES = [7, 10, 20, 30, 50];
@@ -263,6 +277,10 @@
   // A keyword card that couldn't load says why, and the search term cards still show.
   const keywordBody = (data, s, id) => (data.error ? `<div class="zero-status" data-zero-status>Keywords couldn't load: ${SP.esc(data.error)}</div>`
     : `${zeroStatus(data, { what: "keywords", reports: "Keyword reports" })}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: keywordCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`);
+  const wordCols = s => insightCols(s, [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "word", label: "Word", w: 130, fmt: textCell }], WORD_METRICS);
+  // A word card that couldn't load says why, and the other cards still show.
+  const wordBody = (data, s, id) => (data.error ? `<div class="zero-status" data-zero-status>Words couldn't load: ${SP.esc(data.error)}</div>`
+    : `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: wordCols(s), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`);
   // The edit dialog for a card's settings: its metrics (`spec.metrics`) and what it can hide (`spec.hides`).
   const zeroEdit = (s, spec = SEARCH_SPEC) => {
     const sorts = spec.metrics.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
@@ -291,35 +309,38 @@
   SP.pages["/Ads"] = {
     title: "Insights overview",
     load: () => {
-      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords(), kwa: sampleKeywordAcos() });
+      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords(), kwa: sampleKeywordAcos(), mw: sampleWords() });
       const r = SP.rangeFor("Last 30 Days"), q = new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" });
-      // The keyword cards load on their own, so if one fails the other cards still show.
+      // The keyword and word cards load on their own, so if one fails the other cards still show.
       const keywords = filterId => SP.api.get(`/api/ads/keywords?filterId=${filterId}&${q}`).catch(err => ({ error: err.message }));
-      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords("zero-sales-keywords"), keywords("high-acos-keywords")])
-        .then(([st0, acos, perf, kw0, kwa]) => ({ st0, acos, perf, kw0, kwa }));
+      const words = SP.api.get(`/api/ads/search-terms?view=word-insight&filterId=missing-title-words&${q}`).catch(err => ({ error: err.message }));
+      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords("zero-sales-keywords"), keywords("high-acos-keywords"), words])
+        .then(([st0, acos, perf, kw0, kwa, mw]) => ({ st0, acos, perf, kw0, kwa, mw }));
     },
     render(data) {
       const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults(), ks = data.kw0.settings || keywordDefaults();
-      const ka = data.kwa.settings || keywordAcosDefaults();
+      const ka = data.kwa.settings || keywordAcosDefaults(), ws = data.mw.settings || missingTitleDefaults();
       const c1 = zeroBody(data.st0, zs, "i1");
       const c2 = zeroBody(data.acos, as, "i2");
       const c3 = zeroBody(data.perf, ps, "i3");
       const c4 = keywordBody(data.kw0, ks, "i4");
       const c5 = keywordBody(data.kwa, ka, "i5");
+      const c6 = wordBody(data.mw, ws, "i6");
       const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
         ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0", data.st0)}
         ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos", data.acos)}
         ${card(SP.esc(ps.name), c3, SP.esc(ps.description), "perf", data.perf)}
         ${card(SP.esc(ks.name), c4, SP.esc(ks.description), "kw0", data.kw0)}
-        ${card(SP.esc(ka.name), c5, SP.esc(ka.description), "kwa", data.kwa)}`;
+        ${card(SP.esc(ka.name), c5, SP.esc(ka.description), "kwa", data.kwa)}
+        ${card(SP.esc(ws.name), c6, SP.esc(ws.description), "mw", data.mw)}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
     wire(root, data) {
       const initial = SP.rangeFor("Last 30 Days");
       let range = { from: data.st0.from || SP.iso(initial.from), to: data.st0.to || SP.iso(initial.to) };
-      // The three search term cards and the two keyword cards run the same machinery against their
-      // own endpoint and settings; the keyword cards have their own columns and dialog.
+      // The three search term cards, the two keyword cards and the word card run the same machinery
+      // against their own endpoint and settings; keyword and word cards have their own columns and dialog.
       const searchCard = { body: zeroBody, spec: SEARCH_SPEC, params: {} };
       // Each card also keeps its element, data, settings and request state (set below).
       /** @type {Record<string, any>} */
@@ -329,6 +350,7 @@
         perf: { ...searchCard, key: "perf", sel: "[data-perf-card]", grid: "i3", api: "/api/ads/performing", saveApi: "/api/ads/performing-settings", defaults: performingDefaults, sample: samplePerf },
         kw0: { key: "kw0", sel: "[data-kw-card]", grid: "i4", api: "/api/ads/keywords", params: { filterId: "zero-sales-keywords" }, saveApi: "/api/ads/zero-sales-keywords-settings", defaults: keywordDefaults, sample: sampleKeywords, body: keywordBody, spec: KEYWORD_SPEC },
         kwa: { key: "kwa", sel: "[data-kwa-card]", grid: "i5", api: "/api/ads/keywords", params: { filterId: "high-acos-keywords" }, saveApi: "/api/ads/high-acos-keywords-settings", defaults: keywordAcosDefaults, sample: sampleKeywordAcos, body: keywordBody, spec: KEYWORD_SPEC },
+        mw: { key: "mw", sel: "[data-words-card]", grid: "i6", api: "/api/ads/search-terms", params: { view: "word-insight", filterId: "missing-title-words" }, saveApi: "/api/ads/missing-title-words-settings", defaults: missingTitleDefaults, sample: sampleWords, body: wordBody, spec: WORD_SPEC },
       };
       const cardSel = Object.values(cards).map(c => c.sel).join(",");
       for (const c of Object.values(cards)) {
@@ -648,7 +670,7 @@
     wire(root, initial) {
       let query = { from: initial.from, to: initial.to, filterId: initial.filterId || "" }, current = initial, latest = 0, selected = "", tab = 0;
       const range = $("[data-range]", root), error = $("[data-search-error]", root);
-      const setRange = () => { Object.assign(range.dataset, { from: query.from, to: query.to, preset: "Custom Range" }); $(".rlabel", range).textContent = `${day(query.from)} – ${day(query.to)}`; };
+      const setRange = () => showRange(range, query.from, query.to);
       setRange();
       $("[data-search-filter]", root).value = query.filterId;
       $("[data-search-product]", root).value = selected;
@@ -724,14 +746,113 @@
   };
 
   // ---------- Main words ----------
+  // A search term's words are what spaces separate; a title's words have the punctuation around them
+  // trimmed, and the letters and digits inside them count too, as in the API.
+  const termWords = term => [...new Set(String(term).toLowerCase().split(/\s+/).filter(Boolean))];
+  const trimWord = w => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  const titleWords = title => new Set(String(title).toLowerCase().split(/\s+/).flatMap(w => [trimWord(w), ...w.split(/[^\p{L}\p{N}]+/u)]).filter(Boolean));
+  // Sample words come from the sample search terms, per product set and ad type.
+  const sampleWordRows = query => {
+    const words = new Map();
+    for (const r of sampleSearch({ ...query, filterId: "" }).rows) for (const word of termWords(r.term)) {
+      const key = JSON.stringify([r.asin, r.sponsored, word]);
+      const w = words.get(key) || { asin: r.asin, sponsored: r.sponsored, title: r.title, image: null, products: r.products, p: P.find(p => p.asin === r.asin) || null, word, searchTerms: [] };
+      w.searchTerms.push({ ...r, lastSeen: query.to });
+      words.set(key, w);
+    }
+    return [...words.values()].map(w => ({ ...w, ...searchSum(w.searchTerms), terms: w.searchTerms.length, lastSeen: query.to,
+      inTitle: w.products.every(p => { const set = titleWords(p.title); return set.has(w.word) || set.has(trimWord(w.word)); }) }));
+  };
+  const sampleWords = (settings = missingTitleDefaults(), page = 0) => {
+    const r = SP.rangeFor("Last 30 Days");
+    return sampleInsight(sampleWordRows({ from: SP.iso(r.from), to: SP.iso(r.to) }), settings, page, wordHidden(settings));
+  };
+  const wordFilters = { "": "No filter", "missing-title-words": "Missing good Word In Title" };
+  const wordSettings = id => (id === "missing-title-words" ? missingTitleDefaults() : { name: "All words", filters: {}, hideAsins: false, hideInTitle: false, sort: "clicks", dir: "desc" });
+  // The words the filter keeps, grouped by product set, as the API's view=words gives them.
+  const sampleMainWords = query => {
+    const settings = wordSettings(query.filterId), rows = sampleWordRows(query), products = new Map();
+    for (const w of sampleInsight(rows, { ...settings, pageSize: Math.max(1, rows.length) }, 0, wordHidden(settings)).rows) {
+      const p = products.get(w.asin) || { asin: w.asin, title: w.title, image: null, products: w.products, words: [] };
+      p.words.push({ ...w, searchTerms: [...w.searchTerms].sort((a, b) => b.orders - a.orders || b.clicks - a.clicks) });
+      products.set(w.asin, p);
+    }
+    return { ...query, settings, coverage: {}, products: [...products.values()] };
+  };
+  const loadWords = query => (SP.usesRealData() ? SP.api.get(`/api/ads/search-terms?${new URLSearchParams({ view: "words", ...query })}`) : Promise.resolve(sampleMainWords(query)));
+  const activity = v => (v ? SP.dash(new Date(`${v}T12:00:00`)) : "");
+  // Blacklisting and whitelisting words isn't connected yet, so their switches are shown off and disabled.
+  const listSwitch = label => () => `<label class="switch" title="Word lists aren't connected yet."><input type="checkbox" disabled aria-label="${label}"><span class="track"></span></label>`;
+  // The drilldowns page with the insight cards' pager; a word's search terms have no search box.
+  const wordTermGrid = (w, id) => SP.grid({ id, columns: true, instantSearch: false, rowsPager: true, pageSize: 20, sortKey: "orders", cols: [
+    { key: "term", label: "Search terms", w: 180, fmt: searchText },
+    ...searchMetricCols(["impressions", "clicks", "orders", "sales", "conversion"]), { ...searchMetricCols(["spend"])[0], label: "Spent" }, ...searchMetricCols(["cpc", "acos", "roas"]),
+    { key: "lastSeen", label: "Last activity", fmt: activity },
+  ], rows: w.searchTerms.map((t, i) => ({ ...t, _k: String(i) })), sum: searchSum });
+  const wordGrid = (p, id, settings) => SP.grid({ id, columns: true, rowsPager: true, pageSize: 20, sortKey: settings.sort || "clicks", dir: settings.dir === "asc" ? 1 : -1,
+    details: w => `<div class="detpanel">${wordTermGrid(w, `${id}-terms-${w._k}`)}</div>`,
+    cols: [{ key: "sponsored", label: "Sponsored" }, { key: "word", label: "Word", fmt: searchText },
+      { key: "blacklist", label: "Blacklist", sort: false, fmt: listSwitch("Blacklist") }, { key: "whitelist", label: "Whitelist", sort: false, fmt: listSwitch("Whitelist") },
+      { key: "terms", label: "Terms", align: "r", fmt: int },
+      ...searchMetricCols(["impressions", "clicks", "orders", "units", "spend", "sales", "ctr", "cpc", "conversion", "acos", "roas"]),
+      { key: "inTitle", label: "In title", fmt: v => (v == null ? "" : String(v)) },
+      { key: "lastSeen", label: "Last activity", fmt: activity }],
+    rows: p.words.map((w, i) => ({ ...w, _k: String(i) })), sum: searchSum });
+  const wordProducts = (data, selected = "") => SP.grid({ id: "words-products", columns: true, empty: "No words found for these dates and filter.", cols: [
+    { key: "p", label: "Product", muted: true, fmt: (v, r) => `<span class="search-photos">${r.products.map(p => zeroPhoto(p, "zero-thumb")).join("")}</span>` },
+    { key: "asin", label: "ASIN", w: 140, fmt: v => SP.esc(v.replaceAll(",", " + ")) },
+    { key: "title", label: "Title", w: 280, fmt: (v, r) => r.products.map(p => `<span class="clamp2">${SP.esc(p.title || p.asin)}</span>`).join('<span class="sub">+</span>') },
+    { key: "count", label: "Words", align: "r", fmt: int }],
+  rows: data.products.filter(p => !selected || p.asin === selected).map((p, i) => ({ ...p, count: p.words.length, _k: String(i) })),
+  details: p => `<div class="detpanel">${wordGrid(p, `words-product-${p._k}`, data.settings)}</div>` });
+  const productOptions = data => `<option value="">All product groups</option>${data.products.map(p => `<option value="${SP.esc(p.asin)}">${SP.esc(p.asin.replaceAll(",", " + "))}</option>`).join("")}`;
+  const wordsQuery = () => {
+    const params = new URLSearchParams(location.search), range = SP.rangeFor("Last 30 Days");
+    return { from: params.get("from") || SP.iso(range.from), to: params.get("to") || SP.iso(range.to), filterId: Object.hasOwn(wordFilters, params.get("filterId") || "") ? params.get("filterId") || "" : "" };
+  };
+  // The words of the search terms in the dates, grouped by product. Expanding a product lists its
+  // words; expanding a word lists the search terms it's in. A filterId (as the word cards link with)
+  // picks the filter.
   SP.pages["/Ads/MainKeywords"] = {
     title: "Main words",
-    render() {
-      const words = ["rope", "training", "weighted", "home", "gym", "cordless", "jump", "battle", "workout", "fitness", "women", "handles"];
-      return `${learnFilters()}
-        ${SP.panel(`<div class="frow">${ctl.range("", 90, "Last 90 Days")}${ctl.products()}${ctl.select("Select filter", ["No filter", "Top words"])}</div><div class="frow">${ctl.apply("Update")}</div>`)}
-        ${SP.grid({ id: "mw", columns: true, cls: "fit", details: r => `<div class="detpanel">${words.map((w, i) => `<span class="chip-s">${w} <b>${Math.round(r.words / (i + 2))}</b></span>`).join("")}</div>`, cols: [thumbCol, { key: "asin", label: "ASIN", filter: true, fmt: (v, r) => `${v}<small class="sub">${r.p.sku}</small>` }, { key: "title", label: "Title", filter: true, w: 260, fmt: v => `<span class="clamp2">${SP.esc(v)}</span>` }, { key: "words", label: "Words", align: "r", filter: true }], rows: [{ _k: "a", p: P[1], asin: P[1].asin, title: P[1].title, words: 479 }, { _k: "b", p: P[0], asin: P[0].asin, title: P[0].title, words: 425 }] })}
-        ${SP.meta("Updated just now")}`;
+    load: () => loadWords(wordsQuery()),
+    render(data) {
+      return `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}<label class="field"><span>Filter</span><select data-words-filter>${Object.entries(wordFilters).map(([id, label]) => `<option value="${id}" ${data.filterId === id ? "selected" : ""}>${label}</option>`).join("")}</select></label><label class="field"><span>Products</span><select data-words-product>${productOptions(data)}</select></label>${ctl.apply("Update")}</div>`)}
+        <p class="muted">Words are taken from the search terms of each product's ads, per sponsored ad type. Expand a product to see its words, and a word to see the search terms it's in.</p>
+        <div data-words-status>${zeroStatus(data)}</div>
+        <p data-words-error role="alert" hidden></p><div data-words-results>${wordProducts(data)}</div>`;
+    },
+    wire(root, initial) {
+      let query = { from: initial.from, to: initial.to, filterId: initial.filterId || "" }, current = initial, latest = 0, selected = "";
+      const range = $("[data-range]", root), error = $("[data-words-error]", root);
+      showRange(range, query.from, query.to);
+      const update = async () => {
+        const request = ++latest;
+        query = { ...query, filterId: $("[data-words-filter]", root).value };
+        error.hidden = true;
+        root.setAttribute("aria-busy", "true");
+        try {
+          const next = await loadWords(query);
+          if (request !== latest) return;
+          current = next;
+          if (!next.products.some(p => p.asin === selected)) selected = "";
+          $("[data-words-product]", root).innerHTML = productOptions(next);
+          $("[data-words-product]", root).value = selected;
+          $("[data-words-results]", root).innerHTML = wordProducts(next, selected);
+          $("[data-words-status]", root).innerHTML = zeroStatus(next);
+          history.replaceState(null, "", `/Ads/MainKeywords?${new URLSearchParams(query)}`);
+        } catch (err) { if (request === latest) { error.textContent = err.message; error.hidden = false; } }
+        finally { if (request === latest) root.removeAttribute("aria-busy"); }
+      };
+      root.addEventListener("rangechange", e => { query = { ...query, from: e.detail.from, to: e.detail.to }; update(); });
+      root.addEventListener("change", e => {
+        if (e.target.matches("[data-words-filter]")) update();
+        if (e.target.matches("[data-words-product]")) { selected = e.target.value; $("[data-words-results]", root).innerHTML = wordProducts(current, selected); }
+      });
+      root.addEventListener("click", e => {
+        if (e.target.closest("[data-apply]")) update();
+        if (e.target.closest("[data-zero-sync]")) SP.api.post("/api/sync/ads").then(summary => { SP.toast(syncMessage(summary)); return update(); }).catch(err => { error.textContent = err.message; error.hidden = false; });
+      });
     },
   };
 
