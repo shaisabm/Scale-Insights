@@ -101,10 +101,11 @@ describe("Main words report", () => {
     expect(words[0].querySelector(".switch input").disabled).toBe(true);
     words[0].querySelector("[data-gdet]").click();
     await vi.waitFor(() => expect(grid("words-product-0-terms-0")).not.toBeNull());
-    // The drilldowns have Columns but no search box, and the insight cards' pager; the product list keeps its search.
-    for (const id of ["words-product-0", "words-product-0-terms-0"]) {
+    // The drilldowns have Columns and the insight cards' pager; the words can be searched, a word's
+    // search terms can't, and the product list keeps its search.
+    for (const [id, searchable] of [["words-product-0", true], ["words-product-0-terms-0", false]]) {
       const panel = grid(id).closest(".detpanel");
-      expect(panel.querySelector(":scope > .grid-tools [data-gsearch]")).toBeNull();
+      expect(Boolean(panel.querySelector(":scope > .grid-tools [data-gsearch]"))).toBe(searchable);
       expect(panel.querySelector(":scope > .grid-tools [data-gcols]")).not.toBeNull();
       expect(document.querySelector(`[data-gfoot="${id}"] .zero-pager .zero-showing`).textContent).toMatch(/^1(–\d+)? of \d+$/);
       expect(document.querySelector(`[data-gfoot="${id}"] .pager`)).toBeNull();
@@ -113,6 +114,14 @@ describe("Main words report", () => {
     expect(heads(grid("words-product-0-terms-0"))).toEqual(["Search terms", "Impressions", "Clicks", "Orders", "Sales", "Conversion", "Spent", "CPC", "ACOS", "ROAS", "Last activity"]);
     const word = bodyRows(grid("words-product-0"))[0].children[2].textContent;
     for (const tr of bodyRows(grid("words-product-0-terms-0"))) expect(tr.children[0].textContent.split(" ")).toContain(word);
+    // Searching the words narrows them.
+    const search = grid("words-product-0").closest(".detpanel").querySelector(":scope > .grid-tools [data-gsearch]");
+    search.value = "no such word";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bodyRows(grid("words-product-0"))).toHaveLength(0);
+    search.value = word;
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bodyRows(grid("words-product-0")).map(tr => tr.children[2].textContent)).toContain(word);
   });
 
   it("shows the dates it opens with as their preset, as /Ads does, and others as a custom range", async () => {
