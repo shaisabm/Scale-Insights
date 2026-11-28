@@ -15,6 +15,7 @@ describe('keyword states', () => {
       }
       if (path === '/sp/targets/list') return { status: 200, data: { targetingClauses: [{ ...entity('PAUSED'), targetId: '3' }] } };
       expect(method).toBe('GET');
+      if (path.startsWith('/sd/targets?')) return { status: 200, data: [{ campaignId: 'campaign', adGroupId: 'group', targetId: '7', state: 'paused', bid: 0.32 }] };
       return { status: 200, data: path.includes('startIndex=0') ? Array.from({ length: 100 }, (_, i) => entity('enabled', String(i))) : [entity('paused', '100')] };
     }) };
     expect(await refreshKeywordStates(db, ads, 'profile')).toEqual([]);
@@ -25,13 +26,33 @@ describe('keyword states', () => {
     expect(rows[1].details[0].state).toBe('paused');
     await addKeywordStates(db, 'other-profile', rows);
     expect(details.every(d => d.state === 'unknown')).toBe(true);
+    // Sponsored Display targets are kept under their ad type, and each entity's bid alongside.
+    expect((await db.execute("SELECT state FROM ads_keyword_states WHERE ad_product = 'SD' AND keyword_id = '7'")).rows[0].state).toBe('paused');
+    expect((await db.execute("SELECT ad_product, keyword_id, bid FROM ads_keyword_bids WHERE ad_product IN ('SP_SEARCH', 'SD') AND keyword_id IN ('1', '7') ORDER BY keyword_id")).rows.map(r => ({ ...r })))
+      .toEqual([{ ad_product: 'SP_SEARCH', keyword_id: '1', bid: null }, { ad_product: 'SD', keyword_id: '7', bid: 0.32 }]);
+  });
+
+  it('keeps each bid, null when the ad group default applies, and lists Sponsored Display targets only for their report', async () => {
+    const db = await migrate(createClient({ url: ':memory:' }));
+    const paths = [];
+    const ads = { request: vi.fn(async (method, path) => {
+      paths.push(path.split('?')[0]);
+      if (path === '/sp/keywords/list') return { status: 200, data: { keywords: [{ ...entity('ENABLED'), bid: 1.85 }] } };
+      if (path === '/sp/targets/list') return { status: 200, data: { targetingClauses: [{ ...entity('ENABLED'), targetId: '2' }] } };
+      return { status: 200, data: [] };
+    }) };
+    expect(await refreshKeywordStates(db, ads, 'profile', { products: ['SP_SEARCH', 'SB_SEARCH'] })).toEqual([]);
+    expect(paths).not.toContain('/sd/targets');
+    expect((await db.execute("SELECT keyword_id, bid FROM ads_keyword_bids ORDER BY keyword_id")).rows.map(r => ({ ...r }))).toEqual([{ keyword_id: '1', bid: 1.85 }, { keyword_id: '2', bid: null }]);
+    await refreshKeywordStates(db, ads, 'profile', { products: ['SD_TARGETING'] });
+    expect(paths).toContain('/sd/targets');
   });
 
   it('keeps the last successful snapshot on failure and removes entities absent from a successful refresh', async () => {
     const db = await migrate(createClient({ url: ':memory:' }));
     await db.execute("INSERT INTO ads_keyword_states VALUES ('profile','SP_SEARCH','keyword','campaign','group','1','paused','old')");
     const errors = await refreshKeywordStates(db, { request: async () => ({ status: 429 }) }, 'profile');
-    expect(errors).toHaveLength(3);
+    expect(errors).toHaveLength(4);
     expect((await db.execute('SELECT state FROM ads_keyword_states')).rows[0].state).toBe('paused');
     await refreshKeywordStates(db, { request: async (method, path) => ({ status: 200, data: path === '/sp/keywords/list' ? { keywords: [] } : path === '/sp/targets/list' ? { targetingClauses: [] } : [] }) }, 'profile');
     expect((await db.execute('SELECT * FROM ads_keyword_states')).rows).toEqual([]);
@@ -55,8 +76,8 @@ describe('keyword states', () => {
         return { status: 200, data: path === '/sp/keywords/list' ? { keywords: [] } : path === '/sp/targets/list' ? { targetingClauses: [] } : [] };
       } }, 'profile');
       expect(errors).toEqual(["SP_SEARCH keyword state: timed out"]);
-      expect(timeout).toHaveBeenCalledTimes(3);
-      expect(new Set(signals).size).toBe(3);
+      expect(timeout).toHaveBeenCalledTimes(4);
+      expect(new Set(signals).size).toBe(4);
       expect((await db.execute("SELECT ad_product, kind FROM ads_keyword_states")).rows)
         .toEqual([{ ad_product: "SP_SEARCH", kind: "keyword" }]);
     } finally {

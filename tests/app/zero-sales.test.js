@@ -49,7 +49,8 @@ describe("Search Terms with 0 Sales card", () => {
     openApp("/Ads");
     await vi.waitFor(() => expect(document.querySelector("[data-zero-card] table.grid")).not.toBeNull());
     const card = document.querySelector("[data-zero-card]");
-    expect(document.body.textContent).toContain("Live data for this insight is not connected yet.");
+    // Every card has live data now, the keyword card included.
+    expect(document.body.textContent).not.toContain("Live data for this insight is not connected yet.");
     expect(document.body.textContent).not.toContain("cordless jump rope");
     const bodyRows = () => [...card.querySelectorAll("tbody tr[data-k]")];
     expect(bodyRows()).toHaveLength(7);

@@ -48,9 +48,36 @@ export const REPORTS = {
     columns: ["date", "campaignId", "adGroupId", "campaignName", "adGroupName", "keywordId", "keywordText", "matchType", "searchTerm", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
     row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, term: r.searchTerm, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
   },
+  // Keywords and targets, for the keyword insights. Sponsored Products and Brands also report each
+  // one's bid that day and its top-of-search impression share; Sponsored Display reports neither.
+  SP_TARGETING: {
+    historyDays: 90,
+    adProduct: "SPONSORED_PRODUCTS",
+    reportTypeId: "spTargeting",
+    groupBy: ["targeting"],
+    columns: ["date", "campaignId", "campaignName", "adGroupId", "adGroupName", "keywordId", "keyword", "matchType", "keywordType", "targeting", "keywordBid", "topOfSearchImpressionShare", "impressions", "clicks", "cost", "purchases7d", "unitsSoldClicks7d", "sales7d"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, targetId: r.keywordId, target: r.targeting ?? r.keyword, type: r.keywordType ?? r.matchType, bid: r.keywordBid, topShare: r.topOfSearchImpressionShare, orders: r.purchases7d, units: r.unitsSoldClicks7d, sales: r.sales7d }),
+  },
+  SB_TARGETING: {
+    historyDays: 60,
+    adProduct: "SPONSORED_BRANDS",
+    reportTypeId: "sbTargeting",
+    groupBy: ["targeting"],
+    columns: ["date", "campaignId", "campaignName", "adGroupId", "adGroupName", "keywordId", "keywordText", "keywordBid", "keywordType", "matchType", "targetingExpression", "targetingId", "targetingText", "targetingType", "topOfSearchImpressionShare", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, targetId: r.targetingId ?? r.keywordId, target: r.targetingText ?? r.keywordText, type: r.targetingType ?? r.keywordType, bid: r.keywordBid, topShare: r.topOfSearchImpressionShare, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
+  },
+  SD_TARGETING: {
+    historyDays: 60,
+    adProduct: "SPONSORED_DISPLAY",
+    reportTypeId: "sdTargeting",
+    groupBy: ["targeting"],
+    columns: ["date", "campaignId", "campaignName", "adGroupId", "adGroupName", "targetingId", "targetingExpression", "targetingText", "impressions", "clicks", "cost", "purchases", "unitsSold", "sales"],
+    row: r => ({ campaignId: r.campaignId, adGroupId: r.adGroupId, targetId: r.targetingId, target: r.targetingText ?? r.targetingExpression, type: "TARGETING_EXPRESSION", bid: null, topShare: null, orders: r.purchases, units: r.unitsSold, sales: r.sales }),
+  },
 };
 
 export const SEARCH_PRODUCTS = ["SP_SEARCH", "SB_SEARCH"];
+export const TARGETING_PRODUCTS = ["SP_TARGETING", "SB_TARGETING", "SD_TARGETING"];
 
 const SB_ADS = "application/vnd.sbadresource.v4+json";
 const LEASE_MS = 2 * 60_000; // How long a sync may go without saving a page before another may take over.
@@ -236,6 +263,36 @@ export function normalizeSearchDetails(product, rows) {
   return [...grouped.values()];
 }
 
+// Keywords match exactly, by phrase or broadly; Sponsored Products' automatic targets (close match,
+// substitutes and the like) and Sponsored Brands' themes are auto; the rest (products, categories,
+// audiences) are targets.
+const KEYWORD_TYPES = ["EXACT", "PHRASE", "BROAD"], AUTO_TYPES = ["TARGETING_EXPRESSION_PREDEFINED", "THEME"];
+const optional = v => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/** Targeting report rows -> one row per date/campaign/ad group/keyword or target. */
+export function normalizeTargets(product, rows) {
+  const pick = REPORTS[product].row;
+  const out = new Map();
+  for (const raw of rows || []) {
+    const r = pick(raw);
+    const type = String(r.type || "").toUpperCase(), target = String(r.target ?? "");
+    const kind = KEYWORD_TYPES.includes(type) ? "keyword" : AUTO_TYPES.includes(type) ? "auto" : "target";
+    const row = { date: raw.date, campaignId: String(r.campaignId ?? ""), adGroupId: String(r.adGroupId ?? ""), targetId: String(r.targetId ?? target),
+      campaignName: String(raw.campaignName || ""), adGroupName: String(raw.adGroupName || ""), target, kind, matchType: kind === "keyword" ? type.toLowerCase() : "",
+      bid: optional(r.bid), topShare: optional(r.topShare) };
+    const key = [row.date, row.campaignId, row.adGroupId, row.targetId].join("|");
+    const acc = out.get(key) || { ...row, impressions: 0, clicks: 0, cost: 0, orders: 0, units: 0, sales: 0 };
+    acc.impressions += num(raw.impressions);
+    acc.clicks += num(raw.clicks);
+    acc.cost += num(raw.cost);
+    acc.orders += num(r.orders);
+    acc.units += num(r.units);
+    acc.sales += num(r.sales);
+    out.set(key, acc);
+  }
+  return [...out.values()];
+}
+
 /** Report rows -> one row per date/campaign/ad group/ASIN with summed metrics. */
 export function normalizeRows(product, rows) {
   const pick = REPORTS[product].row;
@@ -275,12 +332,16 @@ async function requestReport(ads, profileId, product, w) {
 
 /** Replaces one window's rows and marks its days as stored, in one transaction. */
 export async function storeWindow(db, { profileId, product, start, end, rows, syncedAt, detailRows }) {
-  const search = SEARCH_PRODUCTS.includes(product);
-  const table = search ? "ads_search_terms_daily" : "ads_daily";
+  const search = SEARCH_PRODUCTS.includes(product), targeting = TARGETING_PRODUCTS.includes(product);
+  const table = search ? "ads_search_terms_daily" : targeting ? "ads_targets_daily" : "ads_daily";
   const stmts = [{ sql: `DELETE FROM ${table} WHERE profile_id = ? AND ad_product = ? AND date BETWEEN ? AND ?`, args: [profileId, product, start, end] }];
   for (const r of rows) {
     if (r.date < start || r.date > end) continue;
-    stmts.push(search ? {
+    stmts.push(targeting ? {
+      sql: `INSERT INTO ads_targets_daily (profile_id, ad_product, date, campaign_id, ad_group_id, target_id, campaign_name, ad_group_name, target, match_type, kind, bid, top_share, impressions, clicks, cost, orders, units, sales)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.targetId, r.campaignName, r.adGroupName, r.target, r.matchType, r.kind, r.bid, r.topShare, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales],
+    } : search ? {
       sql: "INSERT INTO ads_search_terms_daily (profile_id, ad_product, date, campaign_id, ad_group_id, search_term, impressions, clicks, cost, orders, units, sales) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       args: [profileId, product, r.date, r.campaignId, r.adGroupId, r.term, r.impressions, r.clicks, r.cost, r.orders, r.units, r.sales],
     } : {
@@ -328,7 +389,7 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
         const report = await ads.getReport(profileId, req.report_id);
         if (report.status === "COMPLETED" && report.url) {
           const rawRows = await ads.downloadReport(report.url);
-          const rows = normalizeRows(req.ad_product, rawRows);
+          const rows = TARGETING_PRODUCTS.includes(req.ad_product) ? normalizeTargets(req.ad_product, rawRows) : normalizeRows(req.ad_product, rawRows);
           const detailRows = req.search_details ? normalizeSearchDetails(req.ad_product, rawRows) : undefined;
           await storeWindow(db, { profileId, product: req.ad_product, start: req.start_date, end: req.end_date, rows, syncedAt: iso(), detailRows });
           await setStatus(req.report_id, "STORED");
@@ -354,8 +415,9 @@ export async function syncAds({ db, ads, profileId, timeZone = "America/Los_Ange
   }
 
   await collect();
-  if (products.some(p => SEARCH_PRODUCTS.includes(p)) && typeof ads.request === "function") {
-    summary.errors.push(...await refreshKeywordStates(db, ads, profileId, { now }));
+  // Search term details and keyword insights both show keyword states.
+  if (products.some(p => SEARCH_PRODUCTS.includes(p) || TARGETING_PRODUCTS.includes(p)) && typeof ads.request === "function") {
+    summary.errors.push(...await refreshKeywordStates(db, ads, profileId, { now, products }));
   }
 
   const lastDate = addDays(todayIn(timeZone, now()), -1);

@@ -10,9 +10,9 @@ vi.mock("../../server/db.js", () => ({ getDb: () => ({}) }));
 afterEach(() => vi.restoreAllMocks());
 
 describe("npm run sync:ads", () => {
-  it("syncs search terms along with the trend reports, like /api/sync/ads", async () => {
+  it("syncs search terms and targeting along with the trend reports, like /api/sync/ads", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     await import("../../scripts/sync-ads.mjs");
-    expect(syncAds).toHaveBeenCalledWith(expect.objectContaining({ profileId: "test-profile", products: ["SP", "SB", "SD", "SP_SEARCH", "SB_SEARCH"] }));
+    expect(syncAds).toHaveBeenCalledWith(expect.objectContaining({ profileId: "test-profile", products: ["SP", "SB", "SD", "SP_SEARCH", "SB_SEARCH", "SP_TARGETING", "SB_TARGETING", "SD_TARGETING"] }));
   });
 });

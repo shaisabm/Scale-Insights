@@ -4,13 +4,21 @@ const sources = [
   { product: "SP_SEARCH", kind: "keyword", path: "/sp/keywords/list", media: "application/vnd.spKeyword.v3+json", key: "keywords", id: "keywordId" },
   { product: "SP_SEARCH", kind: "target", path: "/sp/targets/list", media: "application/vnd.spTargetingClause.v3+json", key: "targetingClauses", id: "targetId" },
   { product: "SB_SEARCH", kind: "keyword", path: "/sb/keywords", media: "application/vnd.sbkeyword.v3+json", id: "keywordId" },
+  // Sponsored Display has no search reports, so its targets are only listed for its targeting
+  // report, and kept under the ad type's own name.
+  { product: "SD", kind: "target", path: "/sd/targets", media: "application/json", id: "targetId", only: "SD_TARGETING" },
 ];
 
-// Current entity state, independent of the historical reporting range. Only list/read calls.
-export async function refreshKeywordStates(db, ads, profileId, { now = Date.now, signal, sourceTimeoutMs = 10000 } = {}) {
+// Bids are dollars; anything else (missing, when the ad group's default bid applies) is stored as null.
+const bidOf = v => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+// Current entity state and bid, independent of the historical reporting range. Only list/read
+// calls. `products` are the reports being synced; without it every source is listed.
+export async function refreshKeywordStates(db, ads, profileId, { now = Date.now, signal, sourceTimeoutMs = 10000, products } = {}) {
   await migrate(db);
   const errors = [];
   for (const source of sources) {
+    if (source.only && products && !products.includes(source.only)) continue;
     try {
       const rows = [], seen = new Set();
       const timeout = AbortSignal.timeout(sourceTimeoutMs);
@@ -31,13 +39,17 @@ export async function refreshKeywordStates(db, ads, profileId, { now = Date.now,
         seen.add(nextToken); startIndex += 100;
       } while (nextToken);
       const stamp = new Date(now()).toISOString();
-      const statements = [{ sql: "DELETE FROM ads_keyword_states WHERE profile_id = ? AND ad_product = ? AND kind = ?", args: [profileId, source.product, source.kind] }];
+      const statements = [
+        { sql: "DELETE FROM ads_keyword_states WHERE profile_id = ? AND ad_product = ? AND kind = ?", args: [profileId, source.product, source.kind] },
+        { sql: "DELETE FROM ads_keyword_bids WHERE profile_id = ? AND ad_product = ? AND kind = ?", args: [profileId, source.product, source.kind] },
+      ];
       for (const row of rows) {
         if (row[source.id] == null || row.campaignId == null || row.adGroupId == null) throw new Error("Missing entity identity");
         const state = String(row.state || "").toLowerCase();
+        const identity = [profileId, source.product, source.kind, String(row.campaignId), String(row.adGroupId), String(row[source.id])];
         statements.push({ sql: "INSERT OR REPLACE INTO ads_keyword_states VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          args: [profileId, source.product, source.kind, String(row.campaignId), String(row.adGroupId), String(row[source.id]),
-            ["enabled", "paused", "archived"].includes(state) ? state : "unknown", stamp] });
+          args: [...identity, ["enabled", "paused", "archived"].includes(state) ? state : "unknown", stamp] });
+        statements.push({ sql: "INSERT OR REPLACE INTO ads_keyword_bids VALUES (?, ?, ?, ?, ?, ?, ?, ?)", args: [...identity, bidOf(row.bid), stamp] });
       }
       await db.batch(statements, "write");
     } catch (err) { errors.push(`${source.product} ${source.kind} state: ${err.message}`); }

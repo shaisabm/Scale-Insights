@@ -57,12 +57,15 @@
     ["training rope with handles", 5921, 23, -27.37], ["training rope", 1450, 14, -15.23], ["cordless battle rope", 284, 12, -11.84],
     ["jump rope for women", 1004, 10, -10.59], ["home gym equipment", 374, 11, -10.42], ["home workout rope", 473, 17, -10.15],
   ];
-  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing" };
+  const insightIds = { st0: "zero-sales", acos: "high-acos", perf: "performing", kw0: "zero-sales-keywords" };
+  // Search term cards open the Search terms report, and keyword cards the Performance report's
+  // Keywords tab, filtered by the card and for its dates.
   const insightLink = (id, range = {}) => {
     const initial = SP.rangeFor("Last 30 Days");
-    return `/Ads/SearchTerms?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
+    return `${id === "kw0" ? "/Ads/Performance/Keywords" : "/Ads/SearchTerms"}?${new URLSearchParams({ filterId: insightIds[id], from: range.from || SP.iso(initial.from), to: range.to || SP.iso(initial.to) })}`;
   };
-  const card = (title, body, tip, id, range) => `<section class="icard" ${id === "st0" ? "data-zero-card" : id === "acos" ? "data-hacos-card" : id === "perf" ? "data-perf-card" : ""}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${insightIds[id] ? insightLink(id, range) : "/Ads/DeadKeywords"}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
+  const CARD_ATTRS = { st0: "data-zero-card", acos: "data-hacos-card", perf: "data-perf-card", kw0: "data-kw-card" };
+  const card = (title, body, tip, id, range) => `<section class="icard" ${CARD_ATTRS[id]}><header><h3>${title}</h3><button class="link-btn" data-edit="${id}">${svg(I.pencil)}Edit</button><a href="${insightLink(id, range)}" class="see">See details ${svg(I.chevronR)}</a></header><div class="icard-body">${body}</div><footer>${tip}</footer></section>`;
   const reports = [["/Ads/Performance", "Performance", "Spend, sales and conversion by product, campaign, keyword and more."], ["/Ads/SearchTerms", "Search terms", "What shoppers typed before clicking your ads."], ["/Ads/BestMetrics", "Best metrics", "Keywords with the strongest results."], ["/Ads/CompetingKeywords", "Competing keywords", "Keywords where your own ads compete."], ["/Ads/NegativeKeywords", "Negative keywords", "Negatives across campaigns."], ["/Ads/MainKeywords", "Main words", "The words that drive each product."], ["/Ads/DeadKeywords", "Dead keywords", "Keywords with no impressions."], ["/Ads/AdvertisingTrend", "Advertising trend", "Week-by-week advertising results."], ["/Ads/SearchTermTrend", "Search term trend", "How one search term performs over time."]];
 
   // The card's metrics as [key, label, column heading, format], matching the API's. Break even bid
@@ -82,6 +85,21 @@
   const zeroDefaults = () => JSON.parse(JSON.stringify(ZERO_DEFAULTS));
   const acosDefaults = () => JSON.parse(JSON.stringify(HIGH_ACOS_DEFAULTS));
   const performingDefaults = () => JSON.parse(JSON.stringify(PERFORMING_DEFAULTS));
+  // Keyword cards list keywords and targets. Their metrics add top-of-search impression share after
+  // ACOS and the current bid last, in the dialog's order, matching the API's.
+  const KEYWORD_METRICS = [...ZERO_METRICS.slice(0, 8), ["topShare", "TOS impression share %", "TOS share", v => pct(v)], ...ZERO_METRICS.slice(8), ["currentBid", "Current bid", "Current bid", money]];
+  // What each kind of card can leave out, as [setting, label] in the dialog's order.
+  const SEARCH_SPEC = { metrics: ZERO_METRICS, hides: [["hideAsins", "Hide ASINs"], ["hideKeywords", "Hide keywords"]] };
+  const KEYWORD_SPEC = {
+    metrics: KEYWORD_METRICS,
+    hides: [["hideProductTargets", "Hide product targets from results"], ["hideKeywordTargets", "Hide keyword targets from results"], ["hideAutoTargets", "Hide auto targets from results"],
+      ["hideExact", "Hide exact keywords from results"], ["hidePhrase", "Hide phrase keywords from results"], ["hideBroad", "Hide broad keywords from results"],
+      ["hidePausedKeywords", "Hide keywords with paused status from results"], ["hidePausedTargets", "Hide targets with paused status from results"]],
+  };
+  // Keywords and targets that spent $20 or more without an order, costliest first, with the current
+  // bid next to the clicks.
+  const KEYWORD_ZERO_DEFAULTS = { name: "Keywords with 0 Sales", description: "[Tip]: You can automatically reduce poor keyword bids using Automation.", showTracked: true, hideProductTargets: false, hideKeywordTargets: false, hideAutoTargets: true, hideExact: false, hidePhrase: false, hideBroad: false, hidePausedKeywords: false, hidePausedTargets: false, sort: "spend", dir: "desc", filters: { orders: { max: 0 }, spend: { min: 20 } }, track: ["clicks", "cpc", "pl", "currentBid"], order: ["campaign", "adGroup", "keyword", "clicks", "currentBid"], pageSize: 7 };
+  const keywordDefaults = () => JSON.parse(JSON.stringify(KEYWORD_ZERO_DEFAULTS));
   const asinTerm = /^B0[A-Z0-9]{8}$/i;
   // Sample rows with every metric, filtered, sorted and paged by the settings as the API does for real data.
   const zeroRow = ([term, impressions, clicks, loss], i) => ({ term, sponsored: "Products", p: P[i % 2], impressions, clicks, orders: 0, units: 0, spend: -loss, sales: 0, cpc: -loss / clicks, ctr: (clicks / impressions) * 100, conversion: 0, acos: null, roas: 0, pl: loss, breakEvenBid: null });
@@ -106,10 +124,37 @@
     ["jump rope for kids", 3400, 30, 8.2, 50.0, 11], ["leather jump rope", 1100, 14, 5.5, 44.0, 8],
     ["digital counting jump rope", 1700, 28, 22.1, 18.2, 2], ["jump rope", 6000, 90, 60.4, 58.5, 9],
   ];
-  function sampleInsight(rows, settings, page) {
+  // Keyword sample rows as [ad type, campaign, ad group, keyword or target, kind, match type, state,
+  // impressions, clicks, spend, sales, orders, current bid]. Beyond the eight the default filter
+  // keeps, there's an auto target, a keyword that sold and one that spent too little.
+  /** @type {[string, string, string, string, string, string, string, number, number, number, number, number, number][]} */
+  const KEYWORDS = [
+    ["Brands", "SBV - JUMP ROPE VIDEO - Red", "JUMP ROPE VIDEO", "jump rope with counter", "keyword", "broad", "enabled", 6120, 44, 49.09, 0, 0, 1.08],
+    ["Brands", "SBV - TRAINING ROPE VIDEO - Blue", "TRAINING ROPE VIDEO", "weighted battle ropes", "keyword", "broad", "enabled", 5480, 46, 45.77, 0, 0, 1.13],
+    ["Products", `SP-EXACT-RANK - ${P[1].asin}`, "Exact", "training rope with handles", "keyword", "exact", "enabled", 2210, 23, 27.37, 0, 0, 0.81],
+    ["Products", `SP-BROAD-DISCOVERY - ${P[0].asin}`, "Broad", "home gym rope", "keyword", "broad", "paused", 2600, 27, 23.1, 0, 0, 0.9],
+    ["Products", `SP-PHRASE-DISCOVERY - ${P[1].asin}`, "Phrase", "battle rope", "keyword", "phrase", "enabled", 3100, 30, 22.5, 0, 0, 0.86],
+    ["Display", `SD-BROAD-VIDEO - ${P[0].asin}`, `${P[0].asin} - Blue`, "audiences-likely-interested-in-ad", "target", "", "enabled", 18400, 59, 21.96, 0, 0, 0.2],
+    ["Products", `SP-PRODUCT-TARGETING - ${P[0].asin}`, "Competitors", `asin="${P[2].asin}"`, "target", "", "enabled", 2900, 24, 21.2, 0, 0, 0.9],
+    ["Products", "SP - Training Ropes - ALL", "Exact", "battle ropes for home gym", "keyword", "exact", "enabled", 1980, 22, 20.73, 0, 0, 0.8],
+    ["Products", `SP-AUTO-RANK - ${P[1].asin}`, "Auto", "close-match", "auto", "", "enabled", 7300, 31, 25.4, 0, 0, 0.75],
+    ["Products", `SP-EXACT-RANK - ${P[0].asin}`, "Exact", "jump rope for women", "keyword", "exact", "enabled", 4000, 40, 38.2, 74.97, 3, 1.14],
+    ["Products", `SP-PHRASE-DISCOVERY - ${P[1].asin}`, "Phrase", "cordless battle ropes", "keyword", "phrase", "enabled", 900, 9, 8.1, 0, 0, 0.95],
+  ];
+  const keywordRow = ([sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, spend, sales, orders, currentBid]) => ({
+    sponsored, campaign, adGroup, keyword, kind, matchType, state, impressions, clicks, orders, units: orders, spend, sales, cpc: spend / clicks, ctr: (clicks / impressions) * 100,
+    conversion: (orders / clicks) * 100, acos: sales ? (spend / sales) * 100 : null, roas: sales / spend, topShare: sponsored === "Display" ? null : (clicks / impressions) * 1000,
+    pl: orders ? null : -spend, breakEvenBid: null, currentBid,
+  });
+  // Which rows a card's settings leave out: ASINs or keywords for search term cards; for keyword
+  // cards, kinds of target, match types and paused keywords or targets.
+  const searchHidden = s => r => (s.hideAsins && asinTerm.test(r.term)) || (s.hideKeywords && !asinTerm.test(r.term));
+  const keywordHidden = s => r => (s.hideProductTargets && r.kind === "target") || (s.hideKeywordTargets && r.kind === "keyword") || (s.hideAutoTargets && r.kind === "auto")
+    || (s.hideExact && r.matchType === "exact") || (s.hidePhrase && r.matchType === "phrase") || (s.hideBroad && r.matchType === "broad")
+    || (r.state === "paused" && (r.kind === "keyword" ? s.hidePausedKeywords : s.hidePausedTargets));
+  function sampleInsight(rows, settings, page, hidden = searchHidden(settings)) {
     const all = rows
-      .filter(r => Object.entries(settings.filters).every(([k, f]) => r[k] != null && (f.min == null || r[k] >= f.min) && (f.max == null || r[k] <= f.max))
-        && !(settings.hideAsins && asinTerm.test(r.term)) && !(settings.hideKeywords && !asinTerm.test(r.term)))
+      .filter(r => Object.entries(settings.filters).every(([k, f]) => r[k] != null && (f.min == null || r[k] >= f.min) && (f.max == null || r[k] <= f.max)) && !hidden(r))
       .sort((a, b) => {
         const x = a[settings.sort], y = b[settings.sort];
         return x == null || y == null ? Number(x == null) - Number(y == null) : (Number(x) - Number(y)) * (settings.dir === "asc" ? 1 : -1);
@@ -125,6 +170,7 @@
   const sampleZero = (settings = zeroDefaults(), page = 0) => sampleInsight(TERMS.map(zeroRow), settings, page);
   const sampleAcos = (settings = acosDefaults(), page = 0) => sampleInsight(ACOS_TERMS.map(acosRow), settings, page);
   const samplePerf = (settings = performingDefaults(), page = 0) => sampleInsight(PERFORMING_TERMS.map(acosRow), settings, page);
+  const sampleKeywords = (settings = keywordDefaults(), page = 0) => sampleInsight(KEYWORDS.map(keywordRow), settings, page, keywordHidden(settings));
   const zeroRows = data => data.rows.map(r => ({ ...r, p: r.p || null, asin: r.asin || "", image: r.image || null, title: r.title || "", products: r.products || [], sp: r.sponsored }));
   // The product's own image (served by this site's /api), else the sample thumbnail or a placeholder.
   // A row naming several products (an ad group advertising them all) shows the first one's photo with
@@ -140,7 +186,7 @@
     return r.image ? `<img class="zero-thumb" src="${SP.esc(r.image)}" alt="${SP.esc(r.title || r.asin)}" title="${SP.esc(r.title || r.asin)}" loading="lazy">`
       : p ? SP.thumb(p, "sm") : `<span class="zero-product" title="${SP.esc(r.asin)}" aria-label="Product image unavailable">▣</span>`;
   };
-  const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands" };
+  const SEARCH_TYPES = { SP_SEARCH: "Sponsored Products", SB_SEARCH: "Sponsored Brands", SP_TARGETING: "Sponsored Products", SB_TARGETING: "Sponsored Brands", SD_TARGETING: "Sponsored Display" };
   const day = iso => SP.shortDate(new Date(`${iso}T12:00:00`));
   // Rows per page and which rows are showing, whenever there are any; the page buttons only when
   // there's more than one page.
@@ -152,53 +198,59 @@
     const nav = pages > 1 ? `<button data-zero-prev ${data.page === 0 ? "disabled" : ""}>‹ Previous</button><span>Page ${data.page + 1} of ${pages}</span><button data-zero-next ${data.page >= pages - 1 ? "disabled" : ""}>Next ›</button>` : "";
     return `<div class="zero-pager" data-zero-pager>${sizes}<span class="zero-showing">${first === last ? first : `${first}–${last}`} of ${data.total}</span>${nav}</div>`;
   };
-  const zeroStatus = data => {
+  // `what` the card lists and the `reports` they come from, as the status words them.
+  const zeroStatus = (data, { what = "search terms", reports = "Search term reports" } = {}) => {
     if (!SP.usesRealData()) return "";
     const entries = Object.entries(data.coverage || {}), coverage = entries.map(([, c]) => c);
     // Dates Amazon doesn't provide (older than it keeps, or not reported yet) are explained; a sync can't add them.
     const notes = [];
     const older = entries.filter(([, c]) => c.availableFrom && data.from < c.availableFrom);
-    if (older.length) notes.push(`Amazon only keeps recent search terms: ${older.map(([k, c]) => `${SEARCH_TYPES[k] || k} from ${day(c.availableFrom)}`).join(", ")}.`);
+    if (older.length) notes.push(`Amazon only keeps recent ${what}: ${older.map(([k, c]) => `${SEARCH_TYPES[k] || k} from ${day(c.availableFrom)}`).join(", ")}.`);
     const reported = coverage.map(c => c.reportedThrough).filter(Boolean).sort()[0];
-    if (reported && data.to > reported) notes.push(`Amazon hasn't reported search terms after ${day(reported)} yet.`);
+    if (reported && data.to > reported) notes.push(`Amazon hasn't reported ${what} after ${day(reported)} yet.`);
     // Rows the server couldn't tie to the products advertised on their dates.
     const unmatched = entries.filter(([, c]) => c.unattributedSpend > 0);
     if (unmatched.length) notes.push(`${unmatched.map(([k, c]) => `${SP.money(c.unattributedSpend)} of ${SEARCH_TYPES[k] || k} spend`).join(" and ")} can't be matched to the products it advertised on its dates, so its search terms are left out.`);
     // Synced days only count once the products they belong to can be matched (mapReady).
     const incomplete = !coverage.length || coverage.some(c => c.days < c.expectedDays || c.mapReady === false);
     if (!incomplete) return notes.length ? `<div class="zero-status" data-zero-status>${notes.join(" ")}</div>` : "";
-    const reason = coverage.some(c => c.pending) ? "Search term reports are still being prepared."
+    const reason = coverage.some(c => c.pending) ? `${reports} are still being prepared.`
       : coverage.some(c => c.mapReady === false) && coverage.every(c => c.days >= c.expectedDays) ? "Sponsored Brands search terms can't be matched to products yet."
-      : "Search term reports are not fully synced.";
+      : `${reports} are not fully synced.`;
     return `<div class="zero-status" data-zero-status>${[reason, ...notes].join(" ")} <button class="link-btn" data-zero-sync>Sync now</button></div>`;
   };
   // These read as "nothing" when they're 0 (as on most rows of this card), so they're left blank then.
   const BLANK_ZERO = new Set(["orders", "units", "sales", "conversion", "acos", "roas"]);
   // Columns follow the order their headers were dragged into (settings.order); any it doesn't
   // list, such as a metric tracked later, keep their usual order after the ones it does.
-  const zeroCols = (s, showIds = false) => {
-    const idCell = v => `<span class="clamp2">${SP.esc(v ?? "")}</span>`;
-    const cols = [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: idCell },
-      ...(showIds ? [{ key: "campaignId", label: "Campaign ID", w: 130, fmt: idCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: idCell }] : []),
-      ...(s.showTracked ? ZERO_METRICS.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
+  const textCell = v => `<span class="clamp2">${SP.esc(v ?? "")}</span>`;
+  const insightCols = (s, base, metrics) => {
+    const cols = [...base, ...(s.showTracked ? metrics.filter(([k]) => s.track.includes(k)) : []).map(([key, , label, f]) => ({ key, label, align: "r", fmt: v => (v == null || (v === 0 && BLANK_ZERO.has(key)) ? "" : f(v)) }))];
     const order = s.order || [], rank = c => (order.includes(c.key) ? order.indexOf(c.key) : order.length);
     return cols.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
   };
+  const zeroCols = (s, showIds = false) => insightCols(s, [{ key: "p", label: "Product", muted: true, fmt: zeroProduct }, { key: "sp", label: "Sponsored" }, { key: "term", label: "Search term", w: 130, fmt: textCell },
+    ...(showIds ? [{ key: "campaignId", label: "Campaign ID", w: 130, fmt: textCell }, { key: "adGroupId", label: "Ad group ID", w: 130, fmt: textCell }] : [])], ZERO_METRICS);
+  const keywordCols = s => insightCols(s, [{ key: "campaign", label: "Campaign", w: 180, fmt: textCell }, { key: "adGroup", label: "Ad group", w: 130, fmt: textCell }, { key: "keyword", label: "Keyword", w: 150, fmt: textCell }], KEYWORD_METRICS);
   // The pager is the table's last row, so it sits right under the totals at the table's right edge.
   const zeroBody = (data, s, id, showIds = false) => `${zeroStatus(data)}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: zeroCols(s, showIds), rows: zeroRows(data), sum: data.totals, below: zeroPager(data) })}`;
-  const zeroEdit = s => {
-    const sorts = ZERO_METRICS.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
-    const rows = ZERO_METRICS.map(([k, label]) => {
+  // A keyword card that couldn't load says why, and the search term cards still show.
+  const keywordBody = (data, s, id) => (data.error ? `<div class="zero-status" data-zero-status>Keywords couldn't load: ${SP.esc(data.error)}</div>`
+    : `${zeroStatus(data, { what: "keywords", reports: "Keyword reports" })}${SP.grid({ id, search: false, noFoot: true, cls: "fit", reorder: true, cols: keywordCols(s), rows: data.rows, sum: data.totals, below: zeroPager(data) })}`);
+  // The edit dialog for a card's settings: its metrics (`spec.metrics`) and what it can hide (`spec.hides`).
+  const zeroEdit = (s, spec = SEARCH_SPEC) => {
+    const sorts = spec.metrics.filter(([k]) => !UNAVAILABLE.has(k)).flatMap(([k, label]) => ["desc", "asc"].map(dir => `<option value="${k}:${dir}" ${s.sort === k && s.dir === dir ? "selected" : ""}>${SP.esc(k === "spend" ? "Cost" : label)} in ${dir === "desc" ? "Descending" : "Ascending"} Order</option>`)).join("");
+    const rows = spec.metrics.map(([k, label]) => {
       const off = UNAVAILABLE.has(k) ? ` disabled title="Needs product costs, which aren't connected yet."` : "", f = s.filters[k] || {};
       return `<tr><th>${SP.esc(label)}</th><td><input type="number" step="any" data-min="${k}" value="${f.min ?? ""}"${off}></td><td><input type="number" step="any" data-max="${k}" value="${f.max ?? ""}"${off}></td><td><input type="checkbox" data-track="${k}" ${s.track.includes(k) ? "checked" : ""}${off}></td></tr>`;
     }).join("");
     const box = (k, label) => `<label><input type="checkbox" data-z="${k}" ${s[k] ? "checked" : ""}> ${label}</label>`;
-    return `<div class="zero-edit"><label class="field"><span>Name</span><input data-z="name" maxlength="80" value="${SP.esc(s.name)}"></label><label class="field"><span>Description</span><input data-z="description" maxlength="300" value="${SP.esc(s.description)}"></label>${box("showTracked", "Show tracked columns in Overview")}<hr>${box("hideAsins", "Hide ASINs")}${box("hideKeywords", "Hide keywords")}<label class="field"><span>Sort by</span><select data-z="sort">${sorts}</select></label><table><thead><tr><th>Filter conditions</th><th>Min</th><th>Max</th><th>Track</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="zero-edit"><label class="field"><span>Name</span><input data-z="name" maxlength="80" value="${SP.esc(s.name)}"></label><label class="field"><span>Description</span><input data-z="description" maxlength="300" value="${SP.esc(s.description)}"></label>${box("showTracked", "Show tracked columns in Overview")}<hr>${spec.hides.map(([k, label]) => box(k, label)).join("")}<label class="field"><span>Sort by</span><select data-z="sort">${sorts}</select></label><table><thead><tr><th>Filter conditions</th><th>Min</th><th>Max</th><th>Track</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   };
   // The dialog's values as { settings }, or { error } about the first problem.
-  const readZeroEdit = m => {
+  const readZeroEdit = (m, spec = SEARCH_SPEC) => {
     const z = k => $(`[data-z=${k}]`, m), filters = {};
-    for (const [k, label] of ZERO_METRICS) {
+    for (const [k, label] of spec.metrics) {
       if (UNAVAILABLE.has(k)) continue;
       const min = $(`[data-min=${k}]`, m).value.trim(), max = $(`[data-max=${k}]`, m).value.trim();
       if (min !== "" && max !== "" && Number(min) > Number(max)) return { error: `The min for ${label} is above its max.` };
@@ -206,42 +258,48 @@
     }
     if (!z("name").value.trim()) return { error: "Give the card a name." };
     const [sort, dir] = z("sort").value.split(":");
-    return { settings: { name: z("name").value.trim(), description: z("description").value.trim(), showTracked: z("showTracked").checked, hideAsins: z("hideAsins").checked, hideKeywords: z("hideKeywords").checked, sort, dir, filters, track: ZERO_METRICS.map(([k]) => k).filter(k => !UNAVAILABLE.has(k) && $(`[data-track=${k}]`, m).checked) } };
+    const hides = Object.fromEntries(spec.hides.map(([k]) => [k, z(k).checked]));
+    return { settings: { name: z("name").value.trim(), description: z("description").value.trim(), showTracked: z("showTracked").checked, ...hides, sort, dir, filters, track: spec.metrics.map(([k]) => k).filter(k => !UNAVAILABLE.has(k) && $(`[data-track=${k}]`, m).checked) } };
   };
 
   SP.pages["/Ads"] = {
     title: "Insights overview",
     load: () => {
-      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf() });
+      if (!SP.usesRealData()) return Promise.resolve({ st0: sampleZero(), acos: sampleAcos(), perf: samplePerf(), kw0: sampleKeywords() });
       const r = SP.rangeFor("Last 30 Days"), q = new URLSearchParams({ from: SP.iso(r.from), to: SP.iso(r.to), page: "0" });
-      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`)]).then(([st0, acos, perf]) => ({ st0, acos, perf }));
+      // The keyword card loads on its own, so if it fails the search term cards still show.
+      const keywords = SP.api.get(`/api/ads/keywords?filterId=zero-sales-keywords&${q}`).catch(err => ({ error: err.message }));
+      return Promise.all([SP.api.get(`/api/ads/zero-sales?${q}`), SP.api.get(`/api/ads/high-acos?${q}`), SP.api.get(`/api/ads/performing?${q}`), keywords]).then(([st0, acos, perf, kw0]) => ({ st0, acos, perf, kw0 }));
     },
     render(data) {
-      const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults();
+      const zs = data.st0.settings || zeroDefaults(), as = data.acos.settings || acosDefaults(), ps = data.perf.settings || performingDefaults(), ks = data.kw0.settings || keywordDefaults();
       const c1 = zeroBody(data.st0, zs, "i1");
       const c2 = zeroBody(data.acos, as, "i2");
       const c3 = zeroBody(data.perf, ps, "i3");
-      const c4 = SP.grid({ id: "i4", search: false, noFoot: true, cls: "fit", cols: [{ key: "camp", label: "Campaign", w: 200 }, { key: "ag", label: "Ad group", w: 160 }, { key: "kw", label: "Keyword", w: 110 }, { key: "clicks", label: "Clicks", align: "r" }, { key: "bid", label: "Current bid", align: "r", fmt: money }, { key: "cpc", label: "CPC", align: "r", fmt: money }, { key: "pl", label: "P&amp;L", align: "r", fmt: pl }],
-        rows: [{ camp: `SD-BROAD-VIDEO - ${P[0].asin}`, ag: `${P[0].asin} - Blue`, kw: "audience: interested shoppers", clicks: 92, bid: 0.2, cpc: 0.3, pl: -27.65 }, { camp: `SP-EXACT-RANK - ${P[1].asin}`, ag: "Exact", kw: "training rope with handles", clicks: 23, bid: 1, cpc: 1.19, pl: -27.37 }],
-        sum: rs => ({ clicks: rs.reduce((a, r) => a + r.clicks, 0), cpc: rs.reduce((a, r) => a + r.cpc, 0) / rs.length, pl: rs.reduce((a, r) => a + r.pl, 0) }) });
-      const waitingCard = title => `<section class="icard"><header><h3>${title}</h3></header><div class="icard-body"><p>Live data for this insight is not connected yet.</p></div></section>`;
+      const c4 = keywordBody(data.kw0, ks, "i4");
       const insights = `${SP.panel(`<div class="frow">${ctl.range("", 30, "Last 30 Days")}${ctl.apply()}</div>`, "")}
         ${card(SP.esc(zs.name), c1, SP.esc(zs.description), "st0", data.st0)}
         ${card(SP.esc(as.name), c2, SP.esc(as.description), "acos", data.acos)}
         ${card(SP.esc(ps.name), c3, SP.esc(ps.description), "perf", data.perf)}
-        ${SP.usesRealData() ? ["Keywords with 0 Sales"].map(waitingCard).join("") : `${card("Keywords with 0 Sales", c4, "[Tip]: Pause or lower bids on keywords that keep spending without sales.", "kw0")}`}`;
+        ${card(SP.esc(ks.name), c4, SP.esc(ks.description), "kw0", data.kw0)}`;
       const avail = `<div class="reports">${reports.map(([h, t, d]) => `<a class="report" href="${h}"><b>${t}</b><span>${d}</span></a>`).join("")}</div>`;
       return `${SP.tabs("ai", ["Actionable insights", "Available reports"])}${SP.panels("ai", [insights, avail])}`;
     },
     wire(root, data) {
       const initial = SP.rangeFor("Last 30 Days");
       let range = { from: data.st0.from || SP.iso(initial.from), to: data.st0.to || SP.iso(initial.to) };
-      // The three search term cards run the same machinery against their own endpoint and settings.
+      // The three search term cards and the keyword card run the same machinery against their own
+      // endpoint and settings; the keyword card has its own columns and dialog.
+      const searchCard = { body: zeroBody, spec: SEARCH_SPEC, params: {} };
+      // Each card also keeps its element, data, settings and request state (set below).
+      /** @type {Record<string, any>} */
       const cards = {
-        st0: { key: "st0", sel: "[data-zero-card]", grid: "i1", api: "/api/ads/zero-sales", saveApi: "/api/ads/zero-sales-settings", defaults: zeroDefaults, sample: sampleZero },
-        acos: { key: "acos", sel: "[data-hacos-card]", grid: "i2", api: "/api/ads/high-acos", saveApi: "/api/ads/high-acos-settings", defaults: acosDefaults, sample: sampleAcos },
-        perf: { key: "perf", sel: "[data-perf-card]", grid: "i3", api: "/api/ads/performing", saveApi: "/api/ads/performing-settings", defaults: performingDefaults, sample: samplePerf },
+        st0: { ...searchCard, key: "st0", sel: "[data-zero-card]", grid: "i1", api: "/api/ads/zero-sales", saveApi: "/api/ads/zero-sales-settings", defaults: zeroDefaults, sample: sampleZero },
+        acos: { ...searchCard, key: "acos", sel: "[data-hacos-card]", grid: "i2", api: "/api/ads/high-acos", saveApi: "/api/ads/high-acos-settings", defaults: acosDefaults, sample: sampleAcos },
+        perf: { ...searchCard, key: "perf", sel: "[data-perf-card]", grid: "i3", api: "/api/ads/performing", saveApi: "/api/ads/performing-settings", defaults: performingDefaults, sample: samplePerf },
+        kw0: { key: "kw0", sel: "[data-kw-card]", grid: "i4", api: "/api/ads/keywords", params: { filterId: "zero-sales-keywords" }, saveApi: "/api/ads/zero-sales-keywords-settings", defaults: keywordDefaults, sample: sampleKeywords, body: keywordBody, spec: KEYWORD_SPEC },
       };
+      const cardSel = Object.values(cards).map(c => c.sel).join(",");
       for (const c of Object.values(cards)) {
         c.el = $(c.sel, root);
         c.current = data[c.key];
@@ -262,7 +320,7 @@
         $("footer", c.el).textContent = c.settings.description;
         // The redraw replaces the Rows menu; someone still on it stays on its replacement.
         const onSize = document.activeElement?.matches("[data-zero-size]") && c.el.contains(document.activeElement);
-        $(".icard-body", c.el).innerHTML = zeroBody(next, c.settings, c.grid);
+        $(".icard-body", c.el).innerHTML = c.body(next, c.settings, c.grid);
         const size = $("[data-zero-size]", c.el);
         if (size) { size.value = String(next.pageSize || 7); if (onSize) size.focus(); }
       };
@@ -284,7 +342,7 @@
         c.page = page;
         if (!SP.usesRealData()) return update(c, c.sample(c.settings, page));
         const size = c.settings.pageSize || 7;
-        const query = new URLSearchParams({ from: range.from, to: range.to, page: String(page), pageSize: String(size) });
+        const query = new URLSearchParams({ ...c.params, from: range.from, to: range.to, page: String(page), pageSize: String(size) });
         return SP.api.get(`${c.api}?${query}`).then(next => {
           if (id !== c.latest) return;
           c.page = next.page;
@@ -308,8 +366,8 @@
         if (ed && cards[ed.dataset.edit]) {
           const c = cards[ed.dataset.edit];
           // Real data saves the settings to the account; sample data keeps them for this page.
-          const dialog = SP.modal(`Edit ${SP.esc(c.settings.name)}`, zeroEdit(c.settings), m => {
-            const { settings: read, error } = readZeroEdit(m);
+          const dialog = SP.modal(`Edit ${SP.esc(c.settings.name)}`, zeroEdit(c.settings, c.spec), m => {
+            const { settings: read, error } = readZeroEdit(m, c.spec);
             if (error) { SP.toast(error); return false; }
             // The dialog doesn't show the column order or rows per page, so saving keeps them.
             const next = { ...read, order: c.settings.order || [], pageSize: c.settings.pageSize || 7 };
@@ -329,9 +387,9 @@
             return false;
           });
           $("[data-z=sort]", dialog).value = `${c.settings.sort}:${c.settings.dir}`;
-        } else if (ed) SP.modal("Edit insight filter", `<label class="field"><span>Minimum clicks</span><input type="number" value="10"></label><label class="field"><span>Maximum orders</span><input type="number" value="0"></label><label class="field"><span>Look-back window (days)</span><input type="number" value="30"></label>`, () => SP.toast("Filter saved."));
+        }
         // The pager and sync button act on the card they sit in.
-        const host = e.target.closest("[data-zero-card],[data-hacos-card],[data-perf-card]");
+        const host = e.target.closest(cardSel);
         const c = host && Object.values(cards).find(x => host.matches(x.sel));
         if (c) {
           if (e.target.closest("[data-zero-next]")) fetchPage(c, c.page + 1);
@@ -348,7 +406,7 @@
       // A new rows-per-page choice reloads the card from its first page and is saved with its settings
       // (to the account with real data, for this page with sample data).
       root.addEventListener("change", e => {
-        const size = e.target.closest("[data-zero-size]"), host = size?.closest("[data-zero-card],[data-hacos-card],[data-perf-card]");
+        const size = e.target.closest("[data-zero-size]"), host = size?.closest(cardSel);
         const c = host && Object.values(cards).find(x => host.matches(x.sel));
         if (!c) return;
         c.settings = { ...c.settings, pageSize: Number(size.value) };
@@ -392,27 +450,43 @@
   /** @param {any} [extra] */
   const learnFilters = (extra = []) => SP.actions(Object.assign([{ yt: true, label: "Learn", act: "learn" }, { icon: "funnel", label: "Filters", act: "filters" }, { icon: "download", label: "Download as CSV", act: "csv", caret: extra.caret }], { extra: extra.html || "" }));
 
-  SP.pages["/Ads/Performance"] = {
+  const PERF_DIMS = ["Products", "Ad types", "Portfolios", "Campaigns", "Ad groups", "Product ads", "Keywords", "Match types", "Placements"];
+  // Keyword filters the Keywords tab can show, by the filterId an insight card links with.
+  const KEYWORD_FILTERS = { "zero-sales-keywords": "Keywords with 0 Sales" };
+  // One tab's columns and sample rows. The Keywords tab with a keyword filter shows the sample
+  // keywords that filter's default settings keep, with their campaign and ad group.
+  const perfView = (i, filterId) => {
+    if (i === 0) return { cols: perfCols, rows: perfRows };
+    const dim = PERF_DIMS[i];
+    if (dim === "Keywords" && KEYWORD_FILTERS[filterId]) {
+      const kept = sampleKeywords({ ...keywordDefaults(), pageSize: KEYWORDS.length }).rows;
+      return { cols: [{ key: "campaign", label: "Campaign", filter: true }, { key: "adGroup", label: "Ad group", filter: true }, { key: "name", label: "Keyword", filter: true }, ...perfCols.slice(2)],
+        rows: kept.map(k => ({ campaign: k.campaign, adGroup: k.adGroup, name: k.keyword, imp: k.impressions, clicks: k.clicks, orders: k.orders, units: k.units, sales: k.sales, conv: k.conversion, spend: k.spend, acos: k.acos || 0, cpc: k.cpc })) };
+    }
+    const names = { "Ad types": ["Sponsored Products", "Sponsored Brands", "Sponsored Display"], Portfolios: ["Main portfolio", "No portfolio"], Campaigns: ["SP-AUTO-RANK", "SP-EXACT-RANK", "SB-VIDEO-BRAND", "SD-BROAD-VIDEO"], "Ad groups": ["Auto", "Exact", "Broad", "Video"], "Product ads": P.slice(0, 2).map(p => p.sku), Keywords: ["training rope", "jump rope for women", "home gym equipment", "cordless battle rope"], "Match types": ["Exact", "Phrase", "Broad", "Auto"], Placements: ["Top of search", "Product pages", "Rest of search"] }[dim];
+    const r = SP.rng(i + 3);
+    return { cols: [{ key: "name", label: dim.replace(/s$/, ""), filter: true }, ...perfCols.slice(2)],
+      rows: names.map(n => { const imp = Math.round(5000 + r() * 90000), clicks = Math.round(imp * (0.003 + r() * 0.008)), orders = Math.round(clicks * r() * 0.06), sales = orders * 23.4, spend = clicks * (0.6 + r() * 0.6); return { name: n, imp, clicks, orders, units: orders, sales, conv: clicks ? (orders / clicks) * 100 : 0, spend, acos: sales ? (spend / sales) * 100 : 0, cpc: spend / clicks }; }) };
+  };
+
+  // The report opens on the tab its address names (/Ads/Performance/Keywords opens Keywords), and a
+  // filterId (as the Keywords with 0 Sales card links with) picks the filter.
+  const performancePage = tab => ({
     title: "Performance",
     render() {
-      const dims = ["Products", "Ad types", "Portfolios", "Campaigns", "Ad groups", "Product ads", "Keywords", "Match types", "Placements"];
+      const filterId = new URLSearchParams(location.search).get("filterId") || "", view = perfView(tab, filterId);
+      const filters = ["No filter", "Spend > $10", "ACOS > 100%", "Zero orders", ...Object.values(KEYWORD_FILTERS)];
       return `${learnFilters()}
-        ${SP.panel(`<div class="frow">${ctl.range("", 30)}${ctl.products()}${ctl.select("Select filter", ["No filter", "Spend > $10", "ACOS > 100%", "Zero orders"])}${ctl.apply()}</div>`)}
-        <div class="scrolltabs"><button class="st-arrow" data-st="-1" aria-label="Scroll tabs left">◂</button>${SP.tabs("perf", dims)}<button class="st-arrow" data-st="1" aria-label="Scroll tabs right">▸</button></div>
-        ${SP.grid({ id: "perf", cols: perfCols, rows: perfRows, sum: sumPerf, toolsBefore: "", tools: `<div class="anchor"><button class="plain-btn" data-view>${svg(I.columns)}Default view ${SP.caret}</button></div>` })}
+        ${SP.panel(`<div class="frow">${ctl.range("", 30)}${ctl.products()}${ctl.select(KEYWORD_FILTERS[filterId] || "Select filter", filters)}${ctl.apply()}</div>`)}
+        <div class="scrolltabs"><button class="st-arrow" data-st="-1" aria-label="Scroll tabs left">◂</button>${SP.tabs("perf", PERF_DIMS, tab)}<button class="st-arrow" data-st="1" aria-label="Scroll tabs right">▸</button></div>
+        ${SP.grid({ id: "perf", cols: view.cols, rows: view.rows, sum: sumPerf, toolsBefore: "", tools: `<div class="anchor"><button class="plain-btn" data-view>${svg(I.columns)}Default view ${SP.caret}</button></div>` })}
         ${SP.meta("Updated just now")}`;
     },
     wire(root) {
       root.addEventListener("tab", e => {
         if (e.detail.id !== "perf") return;
-        const g = SP._grids.perf, dim = ["Products", "Ad types", "Portfolios", "Campaigns", "Ad groups", "Product ads", "Keywords", "Match types", "Placements"][e.detail.i];
-        if (e.detail.i === 0) { g.cols = perfCols; g.rows = perfRows; }
-        else {
-          const names = { "Ad types": ["Sponsored Products", "Sponsored Brands", "Sponsored Display"], Portfolios: ["Main portfolio", "No portfolio"], Campaigns: ["SP-AUTO-RANK", "SP-EXACT-RANK", "SB-VIDEO-BRAND", "SD-BROAD-VIDEO"], "Ad groups": ["Auto", "Exact", "Broad", "Video"], "Product ads": P.slice(0, 2).map(p => p.sku), Keywords: ["training rope", "jump rope for women", "home gym equipment", "cordless battle rope"], "Match types": ["Exact", "Phrase", "Broad", "Auto"], Placements: ["Top of search", "Product pages", "Rest of search"] }[dim];
-          const r = SP.rng(e.detail.i + 3);
-          g.cols = [{ key: "name", label: dim.replace(/s$/, ""), filter: true }, ...perfCols.slice(2)];
-          g.rows = names.map(n => { const imp = Math.round(5000 + r() * 90000), clicks = Math.round(imp * (0.003 + r() * 0.008)), orders = Math.round(clicks * r() * 0.06), sales = orders * 23.4, spend = clicks * (0.6 + r() * 0.6); return { name: n, imp, clicks, orders, units: orders, sales, conv: clicks ? (orders / clicks) * 100 : 0, spend, acos: sales ? (spend / sales) * 100 : 0, cpc: spend / clicks }; });
-        }
+        const g = SP._grids.perf, view = perfView(e.detail.i, new URLSearchParams(location.search).get("filterId") || "");
+        g.cols = view.cols; g.rows = view.rows;
         g.sortKey = null; SP.refreshGrid("perf");
       });
       root.addEventListener("click", e => {
@@ -423,7 +497,10 @@
         if (e.target.closest("[data-apply]")) SP.toast("Report updated.");
       });
     },
-  };
+  });
+  SP.pages["/Ads/Performance"] = performancePage(0);
+  // Not in the Ads menu, so it names the Performance item's icon itself.
+  SP.pages["/Ads/Performance/Keywords"] = { ...performancePage(PERF_DIMS.indexOf("Keywords")), icon: "table", iconColor: "#9b84d6" };
 
   // ---------- Search terms ----------
   const searchFilters = { "": "No filter", "zero-sales": "Search Terms with 0 Sales", "high-acos": "Search Terms with High ACOS", performing: "Performing Search Terms" };

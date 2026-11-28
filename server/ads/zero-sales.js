@@ -19,9 +19,9 @@ export function insightQuery(params, timeZone = process.env.AMAZON_ADS_TIME_ZONE
   return { from, to, today, page, ...(pageSize ? { pageSize } : {}) };
 }
 
-const cents = value => Math.round(Number(value || 0) * 100) / 100;
+export const cents = value => Math.round(Number(value || 0) * 100) / 100;
 const asinPattern = /^B0[A-Z0-9]{8}$/i;
-const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
+export const dayCount = (start, end) => (start <= end ? Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 : 0);
 
 /** Every metric the card can filter, sort or show, from summed counts. Null means unknown. */
 export function metrics(r) {
