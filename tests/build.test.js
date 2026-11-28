@@ -15,7 +15,7 @@ afterEach(() => {
 
 // Runs app/build.mjs on a copy of app/src and returns a reader for the built pages.
 function build(vercelEnv) {
-  dir = mkdtempSync(join(tmpdir(), "scale-insights-build-"));
+  dir = mkdtempSync(join(tmpdir(), "scale-ppc-build-"));
   cpSync(join(APP, "build.mjs"), join(dir, "build.mjs"));
   cpSync(join(APP, "src"), join(dir, "src"), { recursive: true });
   const env = { ...process.env };

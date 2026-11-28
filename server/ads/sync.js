@@ -193,7 +193,7 @@ const POLL_MS = 10_000;
 export function reportSpec(product, { start, end }) {
   const r = REPORTS[product];
   return {
-    name: `scale-insights ${product} ${start}..${end}`,
+    name: `scale-ppc ${product} ${start}..${end}`,
     startDate: start,
     endDate: end,
     configuration: { adProduct: r.adProduct, groupBy: r.groupBy, columns: r.columns, reportTypeId: r.reportTypeId, timeUnit: "DAILY", format: "GZIP_JSON" },
